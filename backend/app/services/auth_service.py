@@ -18,13 +18,14 @@ def verify_password(plain_password: str, hashed_password: str) -> bool:
     return pwd_context.verify(plain_password, hashed_password)
 
 
-def create_access_token(subject: str, tenant_id: str, role: str) -> str:
+def create_access_token(subject: str, tenant_id: str | None, role: str) -> str:
     expire = datetime.now(UTC) + timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES)
 
     payload = {
         "sub": subject,
         "tenant_id": tenant_id,
         "role": role,
+        "type": "access",
         "exp": expire,
     }
 
