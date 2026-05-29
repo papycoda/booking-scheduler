@@ -1,0 +1,29 @@
+services:
+  postgres:
+    image: postgres:15
+    environment:
+      POSTGRES_DB: booking_scheduler
+      POSTGRES_USER: booking_scheduler
+      POSTGRES_PASSWORD: booking_scheduler
+    ports:
+      - "5432:5432"
+    volumes:
+      - booking_scheduler_postgres:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U booking_scheduler -d booking_scheduler"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis:7
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  booking_scheduler_postgres:
