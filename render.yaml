@@ -1,0 +1,70 @@
+services:
+  - type: web
+    name: booking-scheduler-api
+    runtime: python
+    plan: free
+    branch: main
+    autoDeploy: true
+    healthCheckPath: /health
+    buildCommand: pip install -r backend/requirements.txt
+    startCommand: PYTHONPATH=backend python -m alembic -c backend/alembic.ini upgrade head && PYTHONPATH=backend uvicorn app.main:app --host 0.0.0.0 --port $PORT
+    envVars:
+      - key: ENVIRONMENT
+        value: production
+      - key: SECRET_KEY
+        generateValue: true
+      - key: DATABASE_URL
+        fromDatabase:
+          name: booking-scheduler-postgres
+          property: connectionString
+      - key: REDIS_URL
+        fromDatabase:
+          name: booking-scheduler-redis
+          property: connectionString
+      - key: FRONTEND_URL
+        sync: false
+      - key: PAYSTACK_SECRET_KEY
+        sync: false
+      - key: PAYSTACK_WEBHOOK_SECRET
+        sync: false
+      - key: RESEND_API_KEY
+        sync: false
+      - key: FROM_EMAIL
+        sync: false
+      - key: META_WHATSAPP_TOKEN
+        sync: false
+      - key: META_WHATSAPP_PHONE_NUMBER_ID
+        sync: false
+      - key: META_WHATSAPP_BUSINESS_ACCOUNT_ID
+        sync: false
+      - key: UPLOAD_DIR
+        value: /tmp/booking-scheduler-uploads
+      - key: UPLOAD_BASE_URL
+        value: /uploads
+
+  - type: web
+    name: booking-scheduler-frontend
+    runtime: node
+    plan: free
+    branch: main
+    autoDeploy: true
+    buildCommand: cd frontend && npm ci && npm run build
+    startCommand: cd frontend && npm run start -- --hostname 0.0.0.0 --port $PORT
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: NEXT_PUBLIC_API_BASE_URL
+        sync: false
+
+databases:
+  - name: booking-scheduler-postgres
+    databaseName: booking_scheduler
+    user: booking_scheduler
+    plan: free
+    postgresMajorVersion: "15"
+    ipAllowList: []
+
+  - name: booking-scheduler-redis
+    plan: free
+    maxmemoryPolicy: allkeys-lru
+    ipAllowList: []
