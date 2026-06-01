@@ -9,7 +9,7 @@ from sqlalchemy import and_, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.availability import AvailabilityOverride, AvailabilitySchedule
-from app.models.booking import Booking
+from app.models.booking import Booking, BookingRescheduleRequest
 from app.models.service import Service, staff_services
 from app.models.staff import Staff
 from app.models.tenant import Tenant
@@ -54,6 +54,7 @@ async def generate_available_slots(
         if not windows:
             continue
         bookings = await load_bookings_for_local_date(db, tenant_id, staff_member.id, requested_date, tenant_zone)
+        reschedule_holds = await load_reschedule_holds_for_local_date(db, tenant_id, staff_member.id, requested_date, tenant_zone)
         for window in windows:
             for start_utc, end_utc in iter_candidate_slots(
                 requested_date=requested_date,
@@ -65,6 +66,8 @@ async def generate_available_slots(
                 if start_utc < minimum_start:
                     continue
                 if any(overlaps(start_utc, end_utc, booking.start_time, booking.end_time) for booking in bookings):
+                    continue
+                if any(overlaps(start_utc, end_utc, hold.requested_start_time, hold.requested_end_time) for hold in reschedule_holds):
                     continue
                 if start_utc not in merged:
                     merged[start_utc] = (end_utc, set())
@@ -162,6 +165,28 @@ async def load_bookings_for_local_date(
             Booking.status.in_(("pending_payment", "confirmed")),
             Booking.start_time < local_end.astimezone(UTC),
             Booking.end_time > local_start.astimezone(UTC),
+        )
+    )
+    return list(result.scalars().all())
+
+
+async def load_reschedule_holds_for_local_date(
+    db: AsyncSession,
+    tenant_id: UUID,
+    staff_id: UUID,
+    requested_date: date,
+    tenant_zone: ZoneInfo,
+) -> list[BookingRescheduleRequest]:
+    local_start = datetime.combine(requested_date, time.min, tenant_zone)
+    local_end = local_start + timedelta(days=1)
+    result = await db.execute(
+        select(BookingRescheduleRequest).where(
+            BookingRescheduleRequest.tenant_id == tenant_id,
+            BookingRescheduleRequest.requested_staff_id == staff_id,
+            BookingRescheduleRequest.status == "pending",
+            BookingRescheduleRequest.hold_expires_at > datetime.now(UTC),
+            BookingRescheduleRequest.requested_start_time < local_end.astimezone(UTC),
+            BookingRescheduleRequest.requested_end_time > local_start.astimezone(UTC),
         )
     )
     return list(result.scalars().all())

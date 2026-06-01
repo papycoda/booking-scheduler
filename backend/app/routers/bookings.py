@@ -8,12 +8,21 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database import get_db
 from app.dependencies import get_current_user
-from app.models.booking import Booking, BookingInspoAsset, Client
+from app.models.booking import Booking, BookingInspoAsset, BookingRescheduleRequest, Client
 from app.models.payment import Payment
 from app.models.service import Service
 from app.models.staff import Staff
 from app.models.user import User
-from app.schemas.dashboard import AnalyticsOverviewResponse, DashboardBookingResponse, DashboardBookingStatusUpdate
+from app.schemas.dashboard import (
+    AnalyticsOverviewResponse,
+    DashboardBookingResponse,
+    DashboardBookingStatusUpdate,
+    DashboardPayoutResponse,
+    DashboardRescheduleDecision,
+    DashboardRescheduleRequestResponse,
+)
+from app.services.booking_management_service import decide_reschedule_request, dashboard_reschedule_row_to_response
+from app.services.settlement_service import initiate_platform_collected_payout
 
 router = APIRouter(prefix="/dashboard", tags=["dashboard"])
 
@@ -23,6 +32,7 @@ def booking_row_to_response(row, assets_by_booking: dict[UUID, list[BookingInspo
     assets = assets_by_booking.get(booking.id, []) if assets_by_booking else []
     return DashboardBookingResponse(
         id=booking.id,
+        payment_id=getattr(payment, "id", None) if payment else None,
         status=booking.status,
         start_time=booking.start_time,
         end_time=booking.end_time,
@@ -32,10 +42,16 @@ def booking_row_to_response(row, assets_by_booking: dict[UUID, list[BookingInspo
         staff_name=staff.name,
         amount=payment.amount if payment else None,
         payment_status=payment.status if payment else None,
+        collection_mode=getattr(payment, "collection_mode", None) if payment else None,
+        platform_fee_amount=getattr(payment, "platform_fee_amount", None) if payment else None,
+        business_net_amount=getattr(payment, "business_net_amount", None) if payment else None,
+        settlement_status=getattr(payment, "settlement_status", None) if payment else None,
         deposit_amount=getattr(booking, "deposit_amount", payment.amount if payment else 0),
         price_status=getattr(booking, "price_status", "fixed"),
         quoted_price=getattr(booking, "quoted_price", None),
         client_notes=getattr(booking, "client_notes", None),
+        cancellation_reason=getattr(booking, "cancellation_reason", None),
+        cancelled_by=getattr(booking, "cancelled_by", None),
         inspo_assets=[
             {
                 "id": str(asset.id),
@@ -120,6 +136,64 @@ async def update_dashboard_booking(
     result = await db.execute(booking_detail_stmt(current_user.tenant_id).where(Booking.id == booking_id))
     assets_by_booking = await load_inspo_assets(db, [booking_id])
     return booking_row_to_response(result.one(), assets_by_booking)
+
+
+@router.get("/reschedule-requests", response_model=list[DashboardRescheduleRequestResponse])
+async def list_reschedule_requests(
+    current_user: Annotated[User, Depends(get_current_user)],
+    db: Annotated[AsyncSession, Depends(get_db)],
+    include_history: bool = False,
+) -> list[DashboardRescheduleRequestResponse]:
+    from sqlalchemy.orm import aliased
+
+    current_staff = aliased(Staff)
+    requested_staff = aliased(Staff)
+    stmt = (
+        select(BookingRescheduleRequest, Booking, Client, Service, current_staff, requested_staff)
+        .join(Booking, Booking.id == BookingRescheduleRequest.booking_id)
+        .join(Client, Client.id == Booking.client_id)
+        .join(Service, Service.id == Booking.service_id)
+        .join(current_staff, current_staff.id == Booking.staff_id)
+        .join(requested_staff, requested_staff.id == BookingRescheduleRequest.requested_staff_id)
+        .where(BookingRescheduleRequest.tenant_id == current_user.tenant_id)
+        .order_by(BookingRescheduleRequest.created_at.desc())
+    )
+    if not include_history:
+        stmt = stmt.where(BookingRescheduleRequest.status == "pending", BookingRescheduleRequest.hold_expires_at > datetime.now(UTC))
+    result = await db.execute(stmt)
+    return [dashboard_reschedule_row_to_response(row) for row in result.all()]
+
+
+@router.post("/reschedule-requests/{request_id}/decision", status_code=204)
+async def decide_dashboard_reschedule_request(
+    request_id: UUID,
+    payload: DashboardRescheduleDecision,
+    current_user: Annotated[User, Depends(get_current_user)],
+    db: Annotated[AsyncSession, Depends(get_db)],
+) -> None:
+    await decide_reschedule_request(
+        db,
+        tenant_id=current_user.tenant_id,
+        request_id=request_id,
+        user_id=current_user.id,
+        decision=payload.decision,
+        note=payload.note,
+    )
+
+
+@router.post("/payments/{payment_id}/payout", response_model=DashboardPayoutResponse)
+async def initiate_dashboard_payout(
+    payment_id: UUID,
+    current_user: Annotated[User, Depends(get_current_user)],
+    db: Annotated[AsyncSession, Depends(get_db)],
+) -> DashboardPayoutResponse:
+    payment = await initiate_platform_collected_payout(db, tenant_id=current_user.tenant_id, payment_id=payment_id)
+    return DashboardPayoutResponse(
+        payment_id=payment.id,
+        settlement_status=payment.settlement_status,
+        payout_transfer_reference=payment.payout_transfer_reference,
+        payout_transfer_code=payment.payout_transfer_code,
+    )
 
 
 async def load_inspo_assets(db: AsyncSession, booking_ids: list[UUID]) -> dict[UUID, list[BookingInspoAsset]]:

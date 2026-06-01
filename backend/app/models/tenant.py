@@ -14,6 +14,7 @@ class Tenant(UUIDPrimaryKeyMixin, Base):
         CheckConstraint("status IN ('active', 'suspended', 'pending')", name="ck_tenants_status"),
         CheckConstraint("platform_fee_percentage >= 0 AND platform_fee_percentage <= 30", name="ck_tenants_platform_fee_range"),
         CheckConstraint("default_deposit_amount >= 0", name="ck_tenants_default_deposit_nonnegative"),
+        CheckConstraint("payment_setup_status IN ('not_started', 'bank_added', 'split_ready')", name="ck_tenants_payment_setup_status"),
         Index("idx_tenants_slug", "slug"),
     )
 
@@ -26,6 +27,11 @@ class Tenant(UUIDPrimaryKeyMixin, Base):
     address: Mapped[str | None] = mapped_column(Text)
     paystack_subaccount_code: Mapped[str | None] = mapped_column(String(100))
     paystack_business_name: Mapped[str | None] = mapped_column(String(255))
+    payout_bank_code: Mapped[str | None] = mapped_column(String(20))
+    payout_account_number: Mapped[str | None] = mapped_column(String(20))
+    payout_account_name: Mapped[str | None] = mapped_column(String(255))
+    payout_recipient_code: Mapped[str | None] = mapped_column(String(100))
+    payment_setup_status: Mapped[str] = mapped_column(String(20), nullable=False, server_default="not_started")
     platform_fee_percentage: Mapped[Decimal] = mapped_column(Numeric(5, 2), nullable=False, server_default="5.00")
     allow_staff_selection: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default=text("TRUE"))
     booking_buffer_minutes: Mapped[int] = mapped_column(Integer, nullable=False, server_default="15")

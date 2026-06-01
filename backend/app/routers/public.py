@@ -16,10 +16,25 @@ from app.models.payment import Payment
 from app.models.service import Service, staff_services
 from app.models.staff import Staff
 from app.models.tenant import Tenant
-from app.schemas.booking import PublicBookingCreateRequest, PublicBookingCreateResponse, PublicBookingStatusResponse
+from app.schemas.booking import (
+    PublicBookingCancelRequest,
+    PublicBookingCreateRequest,
+    PublicBookingCreateResponse,
+    PublicBookingStatusResponse,
+    PublicManagedBookingResponse,
+    PublicRescheduleRequestCreate,
+    PublicRescheduleRequestResponse,
+)
 from app.schemas.public import PublicServiceResponse, PublicSlotResponse, PublicStaffResponse, PublicTenantResponse
 from app.services.availability_service import generate_available_slots
 from app.services.booking_service import create_public_booking
+from app.services.booking_management_service import (
+    cancel_client_booking,
+    get_managed_booking,
+    manage_url_for_booking,
+    verify_manage_token,
+    create_reschedule_request,
+)
 from app.services.pricing_service import calculate_deposit_due_now, price_label_for_service
 
 router = APIRouter(prefix="/book", tags=["public booking"])
@@ -149,6 +164,7 @@ async def public_booking_status(
     slug: str,
     booking_id: UUID,
     db: Annotated[AsyncSession, Depends(get_db)],
+    token: Annotated[str | None, Query()] = None,
 ) -> PublicBookingStatusResponse:
     tenant = await get_public_tenant(db, slug)
     result = await db.execute(
@@ -174,7 +190,58 @@ async def public_booking_status(
         deposit_amount=booking.deposit_amount,
         price_status=booking.price_status,
         quoted_price=booking.quoted_price,
+        manage_url=manage_url_for_booking(slug, booking.id, token) if token and verify_manage_token(token, booking.manage_token_hash) else None,
     )
+
+
+@router.get("/{slug}/bookings/{booking_id}/manage", response_model=PublicManagedBookingResponse)
+@limiter.limit("30/minute")
+async def public_manage_booking(
+    request: Request,
+    slug: str,
+    booking_id: UUID,
+    token: Annotated[str, Query()],
+    db: Annotated[AsyncSession, Depends(get_db)],
+) -> PublicManagedBookingResponse:
+    tenant = await get_public_tenant(db, slug)
+    return await get_managed_booking(db, tenant=tenant, booking_id=booking_id, token=token)
+
+
+@router.get("/{slug}/bookings/{booking_id}/reschedule-slots", response_model=list[PublicSlotResponse])
+@limiter.limit("30/minute")
+async def public_reschedule_slots(
+    request: Request,
+    slug: str,
+    booking_id: UUID,
+    token: Annotated[str, Query()],
+    requested_date: Annotated[date, Query(alias="date")],
+    db: Annotated[AsyncSession, Depends(get_db)],
+    staff_id: Annotated[UUID | None, Query()] = None,
+) -> list[PublicSlotResponse]:
+    tenant = await get_public_tenant(db, slug)
+    managed = await get_managed_booking(db, tenant=tenant, booking_id=booking_id, token=token)
+    slots = await generate_available_slots(
+        db,
+        tenant_id=tenant.id,
+        service_id=managed.service_id,
+        requested_date=requested_date,
+        staff_id=staff_id or managed.staff_id,
+    )
+    return [PublicSlotResponse(start_time=slot.start_time, end_time=slot.end_time) for slot in slots]
+
+
+@router.post("/{slug}/bookings/{booking_id}/reschedule-requests", response_model=PublicRescheduleRequestResponse)
+@limiter.limit("10/minute")
+async def public_create_reschedule_request(
+    request: Request,
+    slug: str,
+    booking_id: UUID,
+    token: Annotated[str, Query()],
+    payload: PublicRescheduleRequestCreate,
+    db: Annotated[AsyncSession, Depends(get_db)],
+) -> PublicRescheduleRequestResponse:
+    tenant = await get_public_tenant(db, slug)
+    return await create_reschedule_request(db, tenant=tenant, booking_id=booking_id, token=token, payload=payload)
 
 
 @router.get("/{slug}/inspo/{stored_filename}")
@@ -204,20 +271,9 @@ async def public_cancel_booking(
     request: Request,
     slug: str,
     booking_id: UUID,
+    token: Annotated[str, Query()],
     db: Annotated[AsyncSession, Depends(get_db)],
+    payload: PublicBookingCancelRequest | None = None,
 ) -> None:
     tenant = await get_public_tenant(db, slug)
-    result = await db.execute(select(Booking).where(Booking.tenant_id == tenant.id, Booking.id == booking_id))
-    booking = result.scalar_one_or_none()
-    if booking is None:
-        return
-    cancellation_deadline = booking.start_time - timedelta(hours=tenant.cancellation_notice_hours)
-    if datetime.now(UTC) > cancellation_deadline:
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
-            detail={"error": "CANCELLATION_WINDOW_CLOSED", "message": "This booking can no longer be cancelled online."},
-        )
-    booking.status = "cancelled"
-    booking.cancelled_by = "client"
-    booking.cancelled_at = datetime.now(UTC)
-    await db.commit()
+    await cancel_client_booking(db, tenant=tenant, booking_id=booking_id, token=token, reason=payload.reason if payload else None)

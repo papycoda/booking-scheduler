@@ -22,6 +22,7 @@ TENANT_SCOPED_TABLES = (
     "services",
     "clients",
     "bookings",
+    "booking_reschedule_requests",
     "booking_inspo_assets",
     "payments",
     "availability_schedules",

@@ -2,13 +2,16 @@
 
 import { FormEvent, useState } from "react";
 import { api, storeAccessToken } from "../../../lib/api";
+import { AuthShell } from "../../../components/AuthShell";
 
 export default function RegisterPage() {
   const [error, setError] = useState("");
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setError("");
+    setIsSubmitting(true);
     const form = new FormData(event.currentTarget);
     try {
       const response = await api.register({
@@ -21,23 +24,77 @@ export default function RegisterPage() {
       window.location.href = "/dashboard";
     } catch (err) {
       setError(err instanceof Error ? err.message : "Unable to register");
+      setIsSubmitting(false);
     }
   }
 
   return (
-    <main className="mx-auto flex min-h-screen max-w-md items-center px-5">
-      <form onSubmit={submit} className="panel grid w-full gap-4">
-        <div>
-          <p className="eyebrow">Start booking</p>
-          <h1 className="mt-1 text-3xl font-semibold">Create account</h1>
+    <AuthShell
+      eyebrow="Booking Scheduler"
+      title="Run deposits, bookings, staff, and client intake from one dashboard."
+      description="Create your business account, publish a booking link, collect deposits, and let clients choose available times without signing up."
+      switchHref="/login"
+      switchLabel="Login"
+      formTitle="Create account"
+      formSubtitle="For business owners and staff managers."
+    >
+      <form onSubmit={submit} className="grid gap-4">
+        <div className="grid gap-4 sm:grid-cols-2">
+          <label className="auth-label">
+            Business name
+            <input
+              className="auth-input"
+              name="business_name"
+              placeholder="Studio Ayo"
+              required
+            />
+          </label>
+          <label className="auth-label">
+            Your name
+            <input
+              className="auth-input"
+              name="full_name"
+              placeholder="Yemi Ade"
+              required
+            />
+          </label>
         </div>
-        <input name="business_name" placeholder="Business name" required />
-        <input name="full_name" placeholder="Your name" required />
-        <input name="email" type="email" placeholder="Email" required />
-        <input name="password" type="password" placeholder="Password" minLength={8} required />
-        {error && <p className="text-sm text-red-700">{error}</p>}
-        <button type="submit">Register</button>
+        <label className="auth-label">
+          Email address
+          <input
+            className="auth-input"
+            name="email"
+            type="email"
+            placeholder="owner@example.com"
+            required
+          />
+        </label>
+        <label className="auth-label">
+          Password
+          <input
+            className="auth-input"
+            name="password"
+            type="password"
+            placeholder="At least 8 characters"
+            minLength={8}
+            required
+          />
+        </label>
+
+        {error && (
+          <p className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm font-medium text-red-700">
+            {error}
+          </p>
+        )}
+
+        <button
+          className="auth-submit mt-1"
+          type="submit"
+          disabled={isSubmitting}
+        >
+          {isSubmitting ? "Creating account..." : "Create account"}
+        </button>
       </form>
-    </main>
+    </AuthShell>
   );
 }

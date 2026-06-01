@@ -54,6 +54,11 @@ export type Tenant = {
   address?: string | null;
   paystack_subaccount_code?: string | null;
   paystack_business_name?: string | null;
+  payout_bank_code?: string | null;
+  payout_account_number?: string | null;
+  payout_account_name?: string | null;
+  payout_recipient_code?: string | null;
+  payment_setup_status?: string;
   platform_fee_percentage?: string;
   allow_staff_selection: boolean;
   booking_buffer_minutes?: number;
@@ -71,6 +76,7 @@ export type Slot = {
 
 export type DashboardBooking = {
   id: string;
+  payment_id?: string | null;
   status: string;
   start_time: string;
   end_time: string;
@@ -80,11 +86,86 @@ export type DashboardBooking = {
   staff_name: string;
   amount?: number | null;
   payment_status?: string | null;
+  collection_mode?: string | null;
+  platform_fee_amount?: number | null;
+  business_net_amount?: number | null;
+  settlement_status?: string | null;
   deposit_amount: number;
   price_status: string;
   quoted_price?: number | null;
   client_notes?: string | null;
+  cancellation_reason?: string | null;
+  cancelled_by?: string | null;
   inspo_assets?: Array<{ id: string; original_filename: string; content_type: string; size_bytes: number; url: string }>;
+};
+
+export type ManagedBooking = {
+  booking_id: string;
+  booking_status: string;
+  payment_status?: string | null;
+  start_time: string;
+  end_time: string;
+  service_id: string;
+  service_name: string;
+  staff_id: string;
+  staff_name: string;
+  deposit_amount: number;
+  price_status: string;
+  quoted_price?: number | null;
+  cancellation_deadline: string;
+  can_cancel: boolean;
+  deposit_notice: string;
+  pending_reschedule_requests: RescheduleRequest[];
+};
+
+export type RescheduleRequest = {
+  id: string;
+  status: string;
+  requested_start_time: string;
+  requested_end_time: string;
+  requested_staff_id: string;
+  staff_name?: string | null;
+  hold_expires_at: string;
+  client_note?: string | null;
+  decision_note?: string | null;
+};
+
+export type DashboardRescheduleRequest = {
+  id: string;
+  booking_id: string;
+  status: string;
+  client_name: string;
+  client_email: string;
+  service_name: string;
+  current_staff_name: string;
+  requested_staff_name: string;
+  current_start_time: string;
+  current_end_time: string;
+  requested_start_time: string;
+  requested_end_time: string;
+  hold_expires_at: string;
+  client_note?: string | null;
+  decision_note?: string | null;
+};
+
+export type PaymentSetupStatus = {
+  paystack_subaccount_code?: string | null;
+  paystack_business_name?: string | null;
+  payout_bank_code?: string | null;
+  payout_account_number?: string | null;
+  payout_account_name?: string | null;
+  payout_recipient_code?: string | null;
+  payment_setup_status: string;
+  payments_enabled: boolean;
+  payout_ready: boolean;
+  onboarded: boolean;
+};
+
+export type DashboardPayout = {
+  payment_id: string;
+  settlement_status: string;
+  payout_transfer_reference?: string | null;
+  payout_transfer_code?: string | null;
 };
 
 export type AvailabilitySchedule = {
@@ -129,6 +210,23 @@ export function apiAssetUrl(url: string) {
   return `${API_BASE_URL.replace(/\/$/, "")}${url.startsWith("/") ? url : `/${url}`}`;
 }
 
+export function koboToNgn(amount?: number | null) {
+  return (amount ?? 0) / 100;
+}
+
+export function ngnToKobo(value: FormDataEntryValue | null) {
+  const amount = Number(value || 0);
+  return Math.round(amount * 100);
+}
+
+export function formatNgn(amount?: number | null) {
+  return new Intl.NumberFormat("en-NG", {
+    style: "currency",
+    currency: "NGN",
+    maximumFractionDigits: 0,
+  }).format(koboToNgn(amount));
+}
+
 export const api = {
   register: (body: unknown) => request<{ access_token: string; slug: string }>("/auth/register", { method: "POST", body: JSON.stringify(body) }),
   login: (body: unknown) => request<{ access_token: string }>("/auth/login", { method: "POST", body: JSON.stringify(body) }),
@@ -143,21 +241,46 @@ export const api = {
     return request<Slot[]>(`/book/${slug}/slots?${params}`);
   },
   createBooking: (slug: string, body: unknown) =>
-    request<{ booking_id: string; payment_url: string; reference: string; expires_at: string; deposit_amount: number }>(`/book/${slug}/bookings`, {
+    request<{ booking_id: string; payment_url: string; reference: string; expires_at: string; deposit_amount: number; manage_url: string }>(`/book/${slug}/bookings`, {
       method: "POST",
       body: body instanceof FormData ? body : JSON.stringify(body),
     }),
-  bookingStatus: (slug: string, bookingId: string) => request<unknown>(`/book/${slug}/bookings/${bookingId}/status`),
+  bookingStatus: (slug: string, bookingId: string, token?: string) =>
+    request<{ booking_status?: string; manage_url?: string | null }>(`/book/${slug}/bookings/${bookingId}/status${token ? `?token=${encodeURIComponent(token)}` : ""}`),
+  managedBooking: (slug: string, bookingId: string, token: string) =>
+    request<ManagedBooking>(`/book/${slug}/bookings/${bookingId}/manage?token=${encodeURIComponent(token)}`),
+  cancelManagedBooking: (slug: string, bookingId: string, token: string, reason?: string) =>
+    request<void>(`/book/${slug}/bookings/${bookingId}/cancel?token=${encodeURIComponent(token)}`, {
+      method: "POST",
+      body: JSON.stringify({ reason: reason || null }),
+    }),
+  rescheduleSlots: (slug: string, bookingId: string, token: string, date: string, staffId?: string) => {
+    const params = new URLSearchParams({ token, date });
+    if (staffId) params.set("staff_id", staffId);
+    return request<Slot[]>(`/book/${slug}/bookings/${bookingId}/reschedule-slots?${params}`);
+  },
+  createRescheduleRequest: (slug: string, bookingId: string, token: string, body: unknown) =>
+    request<RescheduleRequest>(`/book/${slug}/bookings/${bookingId}/reschedule-requests?token=${encodeURIComponent(token)}`, {
+      method: "POST",
+      body: JSON.stringify(body),
+    }),
   dashboardBookings: (token = getAccessToken()) => request<DashboardBooking[]>("/dashboard/bookings", { token }),
+  dashboardRescheduleRequests: (token = getAccessToken()) => request<DashboardRescheduleRequest[]>("/dashboard/reschedule-requests", { token }),
+  decideRescheduleRequest: (requestId: string, body: unknown, token = getAccessToken()) =>
+    request<void>(`/dashboard/reschedule-requests/${requestId}/decision`, { method: "POST", body: JSON.stringify(body), token }),
   dashboardAnalytics: (token = getAccessToken()) => request<AnalyticsOverview>("/dashboard/analytics/overview", { token }),
   updateDashboardBooking: (bookingId: string, body: unknown, token = getAccessToken()) =>
     request<DashboardBooking>(`/dashboard/bookings/${bookingId}`, { method: "PATCH", body: JSON.stringify(body), token }),
+  initiateDashboardPayout: (paymentId: string, token = getAccessToken()) =>
+    request<DashboardPayout>(`/dashboard/payments/${paymentId}/payout`, { method: "POST", token }),
   currentTenant: (token = getAccessToken()) => request<Tenant>("/tenants/me", { token }),
   updateTenant: (body: unknown, token = getAccessToken()) => request<Tenant>("/tenants/me", { method: "PATCH", body: JSON.stringify(body), token }),
   paystackStatus: (token = getAccessToken()) =>
-    request<{ paystack_subaccount_code?: string | null; paystack_business_name?: string | null; onboarded: boolean }>("/tenants/me/paystack", { token }),
+    request<PaymentSetupStatus>("/tenants/me/paystack", { token }),
+  savePayoutSetup: (body: unknown, token = getAccessToken()) =>
+    request<PaymentSetupStatus>("/tenants/me/payout-setup", { method: "POST", body: JSON.stringify(body), token }),
   onboardPaystack: (body: unknown, token = getAccessToken()) =>
-    request<{ paystack_subaccount_code?: string | null; paystack_business_name?: string | null; onboarded: boolean }>("/tenants/me/paystack", {
+    request<PaymentSetupStatus>("/tenants/me/paystack", {
       method: "POST",
       body: JSON.stringify(body),
       token,

@@ -65,6 +65,31 @@ button:disabled {
 }
 
 @layer components {
+  .auth-input {
+    @apply mt-1.5 w-full rounded-xl border-transparent bg-white/45 px-4 py-2.5 text-sm font-medium text-[#112219] placeholder:text-[#5c7365]/80;
+    min-height: 2.6rem;
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.72), 0 1px 2px rgba(17, 52, 45, 0.04);
+  }
+
+  .auth-input:focus {
+    @apply border-[#486e5b]/40 bg-white/55;
+    box-shadow: 0 0 0 1px rgba(72, 110, 91, 0.25), inset 0 1px 0 rgba(255, 255, 255, 0.8);
+  }
+
+  .auth-label {
+    @apply block text-[10px] font-bold uppercase tracking-wider text-[#3d5245];
+  }
+
+  .auth-submit {
+    @apply w-full rounded-xl border-0 bg-[#2a634c] px-4 py-3 text-sm font-medium text-white;
+    box-shadow: 0 1px 2px rgba(42, 99, 76, 0.12);
+  }
+
+  .auth-submit:hover:not(:disabled) {
+    background: #204d3a;
+    box-shadow: 0 8px 16px rgba(42, 99, 76, 0.12);
+  }
+
   .page-shell {
     @apply mx-auto grid w-full max-w-6xl gap-6 px-4 py-6 sm:px-6 lg:px-8;
   }

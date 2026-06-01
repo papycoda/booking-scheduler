@@ -40,6 +40,7 @@ class Booking(UUIDPrimaryKeyMixin, Base):
         Index("idx_bookings_client_id", "client_id"),
         Index("idx_bookings_start_time", "start_time"),
         Index("idx_bookings_status", "status"),
+        Index("idx_bookings_manage_token_hash", "manage_token_hash"),
     )
 
     tenant_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("tenants.id", ondelete="RESTRICT"), nullable=False)
@@ -53,9 +54,36 @@ class Booking(UUIDPrimaryKeyMixin, Base):
     price_status: Mapped[str] = mapped_column(String(20), nullable=False, server_default="fixed")
     quoted_price: Mapped[int | None] = mapped_column(Integer)
     client_notes: Mapped[str | None] = mapped_column(Text)
+    manage_token_hash: Mapped[str | None] = mapped_column(String(128))
     cancellation_reason: Mapped[str | None] = mapped_column(Text)
     cancelled_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     cancelled_by: Mapped[str | None] = mapped_column(String(10))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, server_default=text("NOW()"))
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, server_default=text("NOW()"))
+
+
+class BookingRescheduleRequest(UUIDPrimaryKeyMixin, Base):
+    __tablename__ = "booking_reschedule_requests"
+    __table_args__ = (
+        CheckConstraint("status IN ('pending', 'approved', 'rejected', 'expired', 'cancelled')", name="ck_booking_reschedule_requests_status"),
+        CheckConstraint("requested_end_time > requested_start_time", name="valid_reschedule_request_time"),
+        Index("idx_booking_reschedule_requests_booking_id", "booking_id"),
+        Index("idx_booking_reschedule_requests_tenant_id", "tenant_id"),
+        Index("idx_booking_reschedule_requests_status", "status"),
+        Index("idx_booking_reschedule_requests_hold", "tenant_id", "requested_staff_id", "requested_start_time", "hold_expires_at"),
+    )
+
+    booking_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("bookings.id", ondelete="CASCADE"), nullable=False)
+    tenant_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("tenants.id", ondelete="CASCADE"), nullable=False)
+    requested_staff_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("staff.id", ondelete="RESTRICT"), nullable=False)
+    requested_start_time: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    requested_end_time: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    status: Mapped[str] = mapped_column(String(20), nullable=False, server_default="pending")
+    hold_expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    client_note: Mapped[str | None] = mapped_column(Text)
+    decision_note: Mapped[str | None] = mapped_column(Text)
+    decided_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    decided_by_user_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), ForeignKey("users.id", ondelete="SET NULL"))
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, server_default=text("NOW()"))
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, server_default=text("NOW()"))
 

@@ -1,5 +1,5 @@
 from app.models.availability import AvailabilityOverride, AvailabilitySchedule
-from app.models.booking import Booking, BookingInspoAsset, Client
+from app.models.booking import Booking, BookingInspoAsset, BookingRescheduleRequest, Client
 from app.models.notification import NotificationLog
 from app.models.payment import Payment
 from app.models.service import Service, staff_services
@@ -12,6 +12,7 @@ __all__ = [
     "AvailabilitySchedule",
     "Booking",
     "BookingInspoAsset",
+    "BookingRescheduleRequest",
     "Client",
     "NotificationLog",
     "Payment",

@@ -8,8 +8,8 @@ from app.database import get_db
 from app.dependencies import get_current_user
 from app.models.tenant import Tenant
 from app.models.user import User
-from app.schemas.tenant import PaystackOnboardingRequest, PaystackStatusResponse, TenantResponse, TenantUpdateRequest
-from app.services.paystack_service import PaystackError, create_subaccount
+from app.schemas.tenant import PayoutSetupRequest, PaystackOnboardingRequest, PaystackStatusResponse, TenantResponse, TenantUpdateRequest
+from app.services.paystack_service import PaystackError, create_subaccount, create_transfer_recipient
 
 router = APIRouter(prefix="/tenants", tags=["tenants"])
 
@@ -69,12 +69,36 @@ async def onboard_paystack(
 
     tenant.paystack_subaccount_code = data.get("subaccount_code")
     tenant.paystack_business_name = payload.business_name
+    tenant.payout_bank_code = payload.settlement_bank
+    tenant.payout_account_number = payload.account_number
+    tenant.payout_account_name = payload.business_name
+    tenant.payment_setup_status = "split_ready" if tenant.paystack_subaccount_code else "bank_added"
     await db.commit()
-    return PaystackStatusResponse(
-        paystack_subaccount_code=tenant.paystack_subaccount_code,
-        paystack_business_name=tenant.paystack_business_name,
-        onboarded=tenant.paystack_subaccount_code is not None,
-    )
+    return tenant_payment_status(tenant)
+
+
+@router.post("/me/payout-setup", response_model=PaystackStatusResponse)
+async def save_payout_setup(
+    payload: PayoutSetupRequest,
+    current_user: Annotated[User, Depends(get_current_user)],
+    db: Annotated[AsyncSession, Depends(get_db)],
+) -> PaystackStatusResponse:
+    tenant = await get_current_tenant(db, current_user)
+    tenant.payout_bank_code = payload.bank_code
+    tenant.payout_account_number = payload.account_number
+    tenant.payout_account_name = payload.account_name
+    tenant.payment_setup_status = "bank_added"
+    try:
+        data = await create_transfer_recipient(
+            name=payload.account_name or tenant.name,
+            bank_code=payload.bank_code,
+            account_number=payload.account_number,
+        )
+        tenant.payout_recipient_code = data.get("recipient_code")
+    except PaystackError:
+        tenant.payout_recipient_code = None
+    await db.commit()
+    return tenant_payment_status(tenant)
 
 
 @router.get("/me/paystack", response_model=PaystackStatusResponse)
@@ -83,8 +107,19 @@ async def paystack_status(
     db: Annotated[AsyncSession, Depends(get_db)],
 ) -> PaystackStatusResponse:
     tenant = await get_current_tenant(db, current_user)
+    return tenant_payment_status(tenant)
+
+
+def tenant_payment_status(tenant: Tenant) -> PaystackStatusResponse:
     return PaystackStatusResponse(
-        paystack_subaccount_code=tenant.paystack_subaccount_code,
-        paystack_business_name=tenant.paystack_business_name,
-        onboarded=tenant.paystack_subaccount_code is not None,
+        paystack_subaccount_code=getattr(tenant, "paystack_subaccount_code", None),
+        paystack_business_name=getattr(tenant, "paystack_business_name", None),
+        payout_bank_code=getattr(tenant, "payout_bank_code", None),
+        payout_account_number=getattr(tenant, "payout_account_number", None),
+        payout_account_name=getattr(tenant, "payout_account_name", None),
+        payout_recipient_code=getattr(tenant, "payout_recipient_code", None),
+        payment_setup_status=getattr(tenant, "payment_setup_status", "not_started"),
+        payments_enabled=True,
+        payout_ready=getattr(tenant, "payment_setup_status", "not_started") in {"bank_added", "split_ready"},
+        onboarded=getattr(tenant, "paystack_subaccount_code", None) is not None,
     )

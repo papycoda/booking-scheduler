@@ -35,9 +35,13 @@ def payment_type_for_service(service: Service) -> str:
     return "deposit"
 
 
+def format_naira_from_kobo(amount: int) -> str:
+    return f"{int(amount) / 100:,.0f}"
+
+
 def price_label_for_service(service: Service) -> str:
     if service.pricing_mode == "consultation":
         return "Price by consultation"
     if service.pricing_mode == "from":
-        return f"From {service.currency} {service.price}"
-    return f"{service.currency} {service.price}"
+        return f"From {service.currency} {format_naira_from_kobo(service.price)}"
+    return f"{service.currency} {format_naira_from_kobo(service.price)}"

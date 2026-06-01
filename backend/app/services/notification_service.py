@@ -6,12 +6,13 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import settings
-from app.models.booking import Booking, Client
+from app.models.booking import Booking, BookingRescheduleRequest, Client
 from app.models.notification import NotificationLog
 from app.models.service import Service
 from app.models.staff import Staff
 from app.models.tenant import Tenant
 from app.models.user import User
+from app.services.booking_management_service import create_manage_token_for_booking, manage_url_for_booking
 
 logger = logging.getLogger(__name__)
 
@@ -109,9 +110,11 @@ async def log_notification(
 async def send_booking_confirmation(db: AsyncSession, booking: Booking) -> None:
     context = await load_booking_context(db, booking)
     tenant, client, service, staff = context
+    manage_url = manage_url_for_booking(tenant.slug, booking.id, create_manage_token_for_booking(booking.id))
+    manage_text = f" Manage your booking here: {manage_url}. Deposits are non-refundable." if manage_url else " Deposits are non-refundable."
     text = (
         f"Hi {client.full_name}, your {service.name} appointment with {staff.name} "
-        f"is confirmed for {booking.start_time.isoformat()}. Ref: {booking.id}"
+        f"is confirmed for {booking.start_time.isoformat()}. Ref: {booking.id}.{manage_text}"
     )
     await send_and_log_email(
         db,
@@ -146,6 +149,42 @@ async def send_booking_confirmation(db: AsyncSession, booking: Booking) -> None:
                 f"for {booking.start_time.isoformat()}."
             ),
         )
+
+
+async def send_reschedule_request_notification(db: AsyncSession, request_id) -> None:
+    context = await load_reschedule_context(db, request_id)
+    if context is None:
+        return
+    request, booking, tenant, client, service, current_staff, requested_staff = context
+    owner = await load_tenant_owner(db, tenant.id)
+    if owner is None:
+        return
+    await send_email(
+        to_email=owner.email,
+        subject=f"Reschedule request for {tenant.name}",
+        text=(
+            f"{client.full_name} requested to move {service.name} from {booking.start_time.isoformat()} "
+            f"with {current_staff.name} to {request.requested_start_time.isoformat()} with {requested_staff.name}. "
+            f"The requested slot is held until {request.hold_expires_at.isoformat()}."
+        ),
+    )
+
+
+async def send_reschedule_decision_notification(db: AsyncSession, request_id) -> None:
+    context = await load_reschedule_context(db, request_id)
+    if context is None:
+        return
+    request, _booking, tenant, client, service, _current_staff, requested_staff = context
+    decision_text = "approved" if request.status == "approved" else "rejected"
+    await send_email(
+        to_email=client.email,
+        subject=f"{tenant.name} reschedule request {decision_text}",
+        text=(
+            f"Your reschedule request for {service.name} was {decision_text}. "
+            f"Requested time: {request.requested_start_time.isoformat()} with {requested_staff.name}. "
+            "Deposits are non-refundable."
+        ),
+    )
 
 
 async def send_booking_reminder(db: AsyncSession, booking: Booking, reminder_type: str) -> bool:
@@ -262,6 +301,24 @@ async def load_booking_context(db: AsyncSession, booking: Booking) -> tuple[Tena
         )
     )
     return result.one()
+
+
+async def load_reschedule_context(db: AsyncSession, request_id):
+    from sqlalchemy.orm import aliased
+
+    current_staff = aliased(Staff)
+    requested_staff = aliased(Staff)
+    result = await db.execute(
+        select(BookingRescheduleRequest, Booking, Tenant, Client, Service, current_staff, requested_staff)
+        .join(Booking, Booking.id == BookingRescheduleRequest.booking_id)
+        .join(Tenant, Tenant.id == BookingRescheduleRequest.tenant_id)
+        .join(Client, Client.id == Booking.client_id)
+        .join(Service, Service.id == Booking.service_id)
+        .join(current_staff, current_staff.id == Booking.staff_id)
+        .join(requested_staff, requested_staff.id == BookingRescheduleRequest.requested_staff_id)
+        .where(BookingRescheduleRequest.id == request_id)
+    )
+    return result.one_or_none()
 
 
 async def load_tenant_owner(db: AsyncSession, tenant_id) -> User | None:

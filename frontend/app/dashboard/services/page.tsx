@@ -1,7 +1,7 @@
 "use client";
 
 import { FormEvent, useEffect, useState } from "react";
-import { api, Service } from "../../../lib/api";
+import { api, formatNgn, ngnToKobo, Service } from "../../../lib/api";
 import { DashboardShell } from "../../../components/DashboardShell";
 
 export default function ServicesPage() {
@@ -27,11 +27,11 @@ export default function ServicesPage() {
       name: form.get("name"),
       description: form.get("description") || null,
       duration_minutes: Number(form.get("duration_minutes")),
-      price: Number(form.get("price")),
+      price: ngnToKobo(form.get("price")),
       currency: "NGN",
       pricing_mode: form.get("pricing_mode"),
       deposit_policy: form.get("deposit_policy"),
-      deposit_amount: form.get("deposit_amount") ? Number(form.get("deposit_amount")) : null,
+      deposit_amount: form.get("deposit_amount") ? ngnToKobo(form.get("deposit_amount")) : null,
     });
     event.currentTarget.reset();
     await load();
@@ -46,7 +46,10 @@ export default function ServicesPage() {
         </div>
         <input name="name" placeholder="Service name" required />
         <input name="duration_minutes" type="number" min={5} max={480} placeholder="Duration" required />
-        <input name="price" type="number" min={0} placeholder="Base/from price in kobo" required />
+        <label className="grid gap-2 text-sm font-semibold text-ink/75">
+          Base/from price (NGN)
+          <input name="price" type="number" min={0} step={1} placeholder="25000" required />
+        </label>
         <select name="pricing_mode" defaultValue="fixed">
           <option value="fixed">Fixed price</option>
           <option value="from">From price</option>
@@ -57,7 +60,10 @@ export default function ServicesPage() {
           <option value="custom">Custom deposit</option>
           <option value="disabled">Full price now</option>
         </select>
-        <input name="deposit_amount" type="number" min={0} placeholder="Custom deposit in kobo" />
+        <label className="grid gap-2 text-sm font-semibold text-ink/75">
+          Custom deposit (NGN)
+          <input name="deposit_amount" type="number" min={0} step={1} placeholder="5000" />
+        </label>
         <input name="description" placeholder="Description" />
         <button type="submit">Add Service</button>
       </form>
@@ -67,10 +73,10 @@ export default function ServicesPage() {
             <div>
               <strong>{service.name}</strong>
               <p className="text-sm text-ink/70">
-                {service.duration_minutes} min - {service.pricing_mode === "consultation" ? "Price by consultation" : `${service.currency} ${service.price}`}
+                {service.duration_minutes} min - {service.pricing_mode === "consultation" ? "Price by consultation" : formatNgn(service.price)}
               </p>
               <p className="text-xs text-ink/60">
-                Deposit: {service.deposit_policy === "custom" ? `${service.currency} ${service.deposit_amount ?? 0}` : service.deposit_policy === "tenant_default" ? "Business default" : "Full fixed price"}
+                Deposit: {service.deposit_policy === "custom" ? formatNgn(service.deposit_amount) : service.deposit_policy === "tenant_default" ? "Business default" : "Full fixed price"}
               </p>
             </div>
             <button className="secondary-button" type="button" onClick={async () => { await api.deleteService(service.id); await load(); }}>Deactivate</button>

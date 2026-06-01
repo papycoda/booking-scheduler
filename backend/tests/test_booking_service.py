@@ -79,13 +79,14 @@ class BookingServiceTests(unittest.IsolatedAsyncioTestCase):
             "choose_staff_with_fewest_bookings": svc.choose_staff_with_fewest_bookings,
             "lock_staff_for_booking": svc.lock_staff_for_booking,
             "upsert_client": svc.upsert_client,
-            "initialize_transaction": svc.initialize_transaction,
+            "initialize_checkout_payment": svc.initialize_checkout_payment,
             "save_inspo_images": svc.save_inspo_images,
         }
 
     def tearDown(self) -> None:
         for name, original in self.originals.items():
-            setattr(svc, name, original)
+            if original is not None:
+                setattr(svc, name, original)
 
     async def test_choose_staff_with_fewest_bookings_prefers_lowest_count(self):
         staff_a = uuid4()
@@ -112,7 +113,7 @@ class BookingServiceTests(unittest.IsolatedAsyncioTestCase):
 
         self.assertIsNone(selected)
 
-    async def test_create_public_booking_creates_pending_booking_payment_and_paystack_metadata(self):
+    async def test_create_public_booking_creates_pending_booking_payment_and_provider_metadata(self):
         tenant_id = uuid4()
         service_id = uuid4()
         staff_id = uuid4()
@@ -153,16 +154,19 @@ class BookingServiceTests(unittest.IsolatedAsyncioTestCase):
         async def upsert_client(_db, _tenant_id, _payload):
             return client_id
 
-        async def initialize_transaction(**kwargs):
+        async def initialize_checkout_payment(**kwargs):
             paystack_call.update(kwargs)
-            return {"authorization_url": "https://checkout.paystack.com/test", "access_code": "access_test"}
+            return (
+                {"authorization_url": "https://checkout.paystack.com/test", "access_code": "access_test"},
+                SimpleNamespace(provider="paystack", collection_mode="direct_split", platform_fee_amount=125, business_net_amount=2_375),
+            )
 
         svc.load_service = load_service
         svc.generate_available_slots = generate_available_slots
         svc.choose_staff_with_fewest_bookings = choose_staff_with_fewest_bookings
         svc.lock_staff_for_booking = lock_staff_for_booking
         svc.upsert_client = upsert_client
-        svc.initialize_transaction = initialize_transaction
+        svc.initialize_checkout_payment = initialize_checkout_payment
 
         db = FakeBookingSession()
         response = await svc.create_public_booking(
@@ -198,11 +202,13 @@ class BookingServiceTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(response.deposit_amount, 2_500)
         self.assertEqual(response.payment_url, "https://checkout.paystack.com/test")
         self.assertEqual(paystack_call["amount"], 2_500)
-        self.assertEqual(paystack_call["transaction_charge"], 125)
         self.assertEqual(paystack_call["metadata"]["payment_type"], "deposit")
         self.assertEqual(paystack_call["metadata"]["deposit_amount"], "2500")
         self.assertEqual(paystack_call["metadata"]["booking_id"], str(booking.id))
         self.assertEqual(paystack_call["metadata"]["tenant_id"], str(tenant_id))
+        self.assertEqual(payment.collection_mode, "direct_split")
+        self.assertEqual(payment.platform_fee_amount, 125)
+        self.assertEqual(payment.business_net_amount, 2_375)
 
     async def test_create_public_booking_rejects_quote_service_without_deposit(self):
         tenant_id = uuid4()
@@ -245,6 +251,151 @@ class BookingServiceTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(getattr(raised.exception, "status_code", None), 409)
         self.assertEqual(raised.exception.detail["error"], "DEPOSIT_REQUIRED")
 
+    async def test_create_public_booking_uses_platform_collection_without_subaccount(self):
+        tenant_id = uuid4()
+        service_id = uuid4()
+        staff_id = uuid4()
+        client_id = uuid4()
+        start_time = datetime(2026, 6, 1, 9, 0, tzinfo=UTC)
+        end_time = start_time + timedelta(hours=1)
+        tenant = SimpleNamespace(
+            id=tenant_id,
+            timezone="Africa/Lagos",
+            paystack_subaccount_code=None,
+            payment_setup_status="not_started",
+            platform_fee_percentage=5,
+            default_deposit_amount=10_000,
+        )
+        service = SimpleNamespace(
+            id=service_id,
+            name="Haircut",
+            price=25_000,
+            currency="NGN",
+            pricing_mode="fixed",
+            deposit_policy="tenant_default",
+            deposit_amount=None,
+        )
+        staff = SimpleNamespace(id=staff_id, name="Ada")
+        paystack_call = {}
+
+        async def load_service(_db, _tenant_id, _service_id):
+            return service
+
+        async def generate_available_slots(_db, **_kwargs):
+            return [AvailableSlot(start_time=start_time, end_time=end_time, available_staff=(staff_id,))]
+
+        async def choose_staff_with_fewest_bookings(_db, _tenant_id, staff_ids, _start_time):
+            return staff_ids[0]
+
+        async def lock_staff_for_booking(_db, _tenant_id, _staff_id, _service_id):
+            return staff
+
+        async def upsert_client(_db, _tenant_id, _payload):
+            return client_id
+
+        async def initialize_checkout_payment(**kwargs):
+            paystack_call.update(kwargs)
+            return (
+                {"authorization_url": "https://checkout.paystack.com/test", "access_code": "access_test"},
+                SimpleNamespace(provider="paystack", collection_mode="platform_collected", platform_fee_amount=500, business_net_amount=9_500),
+            )
+
+        svc.load_service = load_service
+        svc.generate_available_slots = generate_available_slots
+        svc.choose_staff_with_fewest_bookings = choose_staff_with_fewest_bookings
+        svc.lock_staff_for_booking = lock_staff_for_booking
+        svc.upsert_client = upsert_client
+        svc.initialize_checkout_payment = initialize_checkout_payment
+
+        db = FakeBookingSession()
+        response = await svc.create_public_booking(
+            db,
+            tenant=tenant,
+            slug="ada-hair",
+            payload=PublicBookingCreateRequest(
+                service_id=service_id,
+                start_time=start_time,
+                client={"full_name": "Chioma Okafor", "email": "chioma@example.com"},
+            ),
+        )
+
+        payment = db.added[1]
+        self.assertEqual(response.payment_url, "https://checkout.paystack.com/test")
+        self.assertEqual(paystack_call["tenant"], tenant)
+        self.assertEqual(payment.collection_mode, "platform_collected")
+        self.assertEqual(payment.platform_fee_amount, 500)
+        self.assertEqual(payment.business_net_amount, 9_500)
+        self.assertEqual(payment.settlement_status, "not_due")
+
+    async def test_create_public_booking_caps_platform_fee_at_ten_percent(self):
+        tenant_id = uuid4()
+        service_id = uuid4()
+        staff_id = uuid4()
+        client_id = uuid4()
+        start_time = datetime(2026, 6, 1, 9, 0, tzinfo=UTC)
+        tenant = SimpleNamespace(
+            id=tenant_id,
+            timezone="Africa/Lagos",
+            paystack_subaccount_code=None,
+            payment_setup_status="not_started",
+            platform_fee_percentage=25,
+            default_deposit_amount=20_000,
+        )
+        service = SimpleNamespace(
+            id=service_id,
+            name="Braids",
+            price=20_000,
+            currency="NGN",
+            pricing_mode="fixed",
+            deposit_policy="tenant_default",
+            deposit_amount=None,
+        )
+        staff = SimpleNamespace(id=staff_id, name="Ada")
+
+        async def load_service(_db, _tenant_id, _service_id):
+            return service
+
+        async def generate_available_slots(_db, **_kwargs):
+            return [AvailableSlot(start_time=start_time, end_time=start_time + timedelta(hours=1), available_staff=(staff_id,))]
+
+        async def choose_staff_with_fewest_bookings(_db, _tenant_id, staff_ids, _start_time):
+            return staff_ids[0]
+
+        async def lock_staff_for_booking(_db, _tenant_id, _staff_id, _service_id):
+            return staff
+
+        async def upsert_client(_db, _tenant_id, _payload):
+            return client_id
+
+        async def initialize_checkout_payment(**_kwargs):
+            return (
+                {"authorization_url": "https://checkout.paystack.com/test", "access_code": "access_test"},
+                SimpleNamespace(provider="paystack", collection_mode="platform_collected", platform_fee_amount=2_000, business_net_amount=18_000),
+            )
+
+        svc.load_service = load_service
+        svc.generate_available_slots = generate_available_slots
+        svc.choose_staff_with_fewest_bookings = choose_staff_with_fewest_bookings
+        svc.lock_staff_for_booking = lock_staff_for_booking
+        svc.upsert_client = upsert_client
+        svc.initialize_checkout_payment = initialize_checkout_payment
+
+        db = FakeBookingSession()
+        await svc.create_public_booking(
+            db,
+            tenant=tenant,
+            slug="ada-hair",
+            payload=PublicBookingCreateRequest(
+                service_id=service_id,
+                start_time=start_time,
+                client={"full_name": "Chioma Okafor", "email": "chioma@example.com"},
+            ),
+        )
+
+        payment = db.added[1]
+        self.assertEqual(payment.platform_fee_amount, 2_000)
+        self.assertEqual(payment.business_net_amount, 18_000)
+
     async def test_create_public_booking_stores_inspo_assets(self):
         tenant_id = uuid4()
         service_id = uuid4()
@@ -286,8 +437,11 @@ class BookingServiceTests(unittest.IsolatedAsyncioTestCase):
         async def upsert_client(_db, _tenant_id, _payload):
             return client_id
 
-        async def initialize_transaction(**_kwargs):
-            return {"authorization_url": "https://checkout.paystack.com/test", "access_code": "access_test"}
+        async def initialize_checkout_payment(**_kwargs):
+            return (
+                {"authorization_url": "https://checkout.paystack.com/test", "access_code": "access_test"},
+                SimpleNamespace(provider="paystack", collection_mode="direct_split", platform_fee_amount=150, business_net_amount=2_850),
+            )
 
         async def save_inspo_images(**kwargs):
             asset.booking_id = kwargs["booking_id"]
@@ -298,7 +452,7 @@ class BookingServiceTests(unittest.IsolatedAsyncioTestCase):
         svc.choose_staff_with_fewest_bookings = choose_staff_with_fewest_bookings
         svc.lock_staff_for_booking = lock_staff_for_booking
         svc.upsert_client = upsert_client
-        svc.initialize_transaction = initialize_transaction
+        svc.initialize_checkout_payment = initialize_checkout_payment
         svc.save_inspo_images = save_inspo_images
 
         db = FakeBookingSession()

@@ -1,7 +1,7 @@
 "use client";
 
 import { FormEvent, useEffect, useState } from "react";
-import { api, Service, Slot, Staff, Tenant } from "../../../lib/api";
+import { api, formatNgn, Service, Slot, Staff, Tenant } from "../../../lib/api";
 
 export default function PublicBookingPage({ params }: { params: { slug: string } }) {
   const [tenant, setTenant] = useState<Tenant | null>(null);
@@ -88,7 +88,7 @@ export default function PublicBookingPage({ params }: { params: { slug: string }
         <div className="mt-6 grid gap-3 text-sm text-ink/70">
           {tenant?.address && <p>{tenant.address}</p>}
           {tenant?.phone && <p>{tenant.phone}</p>}
-          <p>Choose a service, pick an available time, and confirm with the deposit due now.</p>
+          <p>Choose a service, pick an available time, and pay the deposit now. Card and bank transfer options may be available at checkout.</p>
         </div>
       </header>
       <form onSubmit={submit} className="panel grid gap-6">
@@ -110,8 +110,8 @@ export default function PublicBookingPage({ params }: { params: { slug: string }
           <input type="date" value={date} onChange={(event) => setDate(event.target.value)} required />
           {selectedService && (
             <div className="panel-muted grid gap-1 text-sm">
-              <p>{selectedService.price_label ?? `${selectedService.currency} ${selectedService.price}`}</p>
-              <p className="text-lg font-semibold">Deposit due now: {selectedService.currency} {selectedService.deposit_due_now ?? selectedService.price}</p>
+              <p>{selectedService.price_label ?? formatNgn(selectedService.price)}</p>
+              <p className="text-lg font-semibold">Deposit due now: {formatNgn(selectedService.deposit_due_now ?? selectedService.price)}</p>
             </div>
           )}
           {slotsLoading && <p className="muted">Loading times...</p>}

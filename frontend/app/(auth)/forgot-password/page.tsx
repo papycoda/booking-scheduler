@@ -1,7 +1,9 @@
 "use client";
 
 import { FormEvent, useState } from "react";
+import Link from "next/link";
 import { api } from "../../../lib/api";
+import { AuthShell } from "../../../components/AuthShell";
 
 export default function ForgotPasswordPage() {
   const [message, setMessage] = useState("");
@@ -10,27 +12,66 @@ export default function ForgotPasswordPage() {
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setError("");
+    setMessage("");
     const form = new FormData(event.currentTarget);
     try {
       await api.forgotPassword({ email: form.get("email") });
-      setMessage("If an account exists, a reset link has been sent");
+      setMessage("If an account exists, a reset link has been sent to your email.");
     } catch (err) {
       setError(err instanceof Error ? err.message : "Could not request reset");
     }
   }
 
   return (
-    <main className="mx-auto flex min-h-screen max-w-md items-center px-5">
-      <form onSubmit={submit} className="panel grid w-full gap-4">
-        <div>
-          <p className="eyebrow">Account access</p>
-          <h1 className="mt-1 text-3xl font-semibold">Forgot password</h1>
+    <AuthShell
+      eyebrow="Booking Scheduler"
+      title="Keep bookings, deposits, quotes, and client notes moving."
+      description="Sign in to manage services, staff availability, booking status, inspo uploads, and payment records."
+      switchHref="/login"
+      switchLabel="Back to login"
+      formTitle="Reset password"
+      formSubtitle="We'll send you a reset link."
+    >
+      <form onSubmit={submit} className="grid gap-4">
+        <label className="auth-label">
+          Email address
+          <input
+            className="auth-input"
+            name="email"
+            type="email"
+            placeholder="owner@example.com"
+            required
+          />
+        </label>
+
+        {message && (
+          <p className="rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm font-medium text-emerald-800">
+            {message}
+          </p>
+        )}
+
+        {error && (
+          <p className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm font-medium text-red-700">
+            {error}
+          </p>
+        )}
+
+        <button
+          className="auth-submit mt-1"
+          type="submit"
+        >
+          Send Reset Link
+        </button>
+
+        <div className="text-center">
+          <Link
+            href="/login"
+            className="text-sm font-semibold text-slate-600 hover:text-emerald-700"
+          >
+            Remember your password? Sign in
+          </Link>
         </div>
-        <input name="email" type="email" placeholder="Email" required />
-        {message && <p className="text-sm text-action">{message}</p>}
-        {error && <p className="text-sm text-red-700">{error}</p>}
-        <button type="submit">Send Reset Link</button>
       </form>
-    </main>
+    </AuthShell>
   );
 }

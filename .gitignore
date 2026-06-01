@@ -7,3 +7,7 @@ tmp/
 backend/uploads/
 frontend/.next/
 frontend/node_modules/
+CLAUDE.md
+.claude/settings.local.json
+frontend/public/auth/reference.png
+backend/image.png

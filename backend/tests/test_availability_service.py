@@ -36,6 +36,7 @@ class AvailabilityServiceTests(unittest.IsolatedAsyncioTestCase):
             self.staff_b: [svc.LocalWindow(time(9, 0), time(12, 0))],
         }
         self.bookings = {self.staff_a: [], self.staff_b: []}
+        self.reschedule_holds = {self.staff_a: [], self.staff_b: []}
         self._patch_loaders()
 
     def _patch_loaders(self) -> None:
@@ -45,6 +46,7 @@ class AvailabilityServiceTests(unittest.IsolatedAsyncioTestCase):
             "load_candidate_staff": svc.load_candidate_staff,
             "load_working_windows": svc.load_working_windows,
             "load_bookings_for_local_date": svc.load_bookings_for_local_date,
+            "load_reschedule_holds_for_local_date": svc.load_reschedule_holds_for_local_date,
         }
 
         async def load_tenant(_db, tenant_id):
@@ -64,11 +66,15 @@ class AvailabilityServiceTests(unittest.IsolatedAsyncioTestCase):
         async def load_bookings_for_local_date(_db, tenant_id, staff_id, requested_date, tenant_zone):
             return self.bookings.get(staff_id, [])
 
+        async def load_reschedule_holds_for_local_date(_db, tenant_id, staff_id, requested_date, tenant_zone):
+            return self.reschedule_holds.get(staff_id, [])
+
         svc.load_tenant = load_tenant
         svc.load_service = load_service
         svc.load_candidate_staff = load_candidate_staff
         svc.load_working_windows = load_working_windows
         svc.load_bookings_for_local_date = load_bookings_for_local_date
+        svc.load_reschedule_holds_for_local_date = load_reschedule_holds_for_local_date
 
     def tearDown(self) -> None:
         for name, original in self.originals.items():
@@ -128,6 +134,19 @@ class AvailabilityServiceTests(unittest.IsolatedAsyncioTestCase):
         slots = await self.generate()
 
         self.assertEqual(len(slots), 2)
+        self.assertEqual(set(slots[0].available_staff), {self.staff_b})
+        self.assertEqual(set(slots[1].available_staff), {self.staff_a, self.staff_b})
+
+    async def test_pending_reschedule_hold_blocks_requested_slot(self):
+        self.reschedule_holds[self.staff_a] = [
+            SimpleNamespace(
+                requested_start_time=datetime(2026, 6, 1, 8, 0, tzinfo=UTC),
+                requested_end_time=datetime(2026, 6, 1, 9, 0, tzinfo=UTC),
+            )
+        ]
+
+        slots = await self.generate()
+
         self.assertEqual(set(slots[0].available_staff), {self.staff_b})
         self.assertEqual(set(slots[1].available_staff), {self.staff_a, self.staff_b})
 

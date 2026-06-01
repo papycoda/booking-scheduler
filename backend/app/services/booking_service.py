@@ -14,8 +14,10 @@ from app.models.staff import Staff
 from app.models.tenant import Tenant
 from app.schemas.booking import PublicBookingCreateRequest, PublicBookingCreateResponse
 from app.services.availability_service import generate_available_slots, load_candidate_staff, load_service
+from app.services.booking_management_service import create_manage_token_for_booking, hash_manage_token, manage_url_for_booking
 from app.services.inspo_service import save_inspo_images
-from app.services.paystack_service import PaystackError, initialize_transaction
+from app.services.paystack_service import PaystackError
+from app.services.payment_provider import initialize_checkout_payment
 from app.services.pricing_service import calculate_deposit_due_now, payment_type_for_service, price_status_for_service, requires_deposit_for_booking
 
 
@@ -27,11 +29,6 @@ async def create_public_booking(
     payload: PublicBookingCreateRequest,
     inspo_images: list | None = None,
 ) -> PublicBookingCreateResponse:
-    if tenant.paystack_subaccount_code is None:
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
-            detail={"error": "PAYSTACK_NOT_ONBOARDED", "message": "This business is not ready to accept bookings."},
-        )
     service = await load_service(db, tenant.id, payload.service_id)
     deposit_amount = calculate_deposit_due_now(tenant, service)
     payment_type = payment_type_for_service(service)
@@ -94,6 +91,8 @@ async def create_public_booking(
         )
         db.add(booking)
         await db.flush()
+        manage_token = create_manage_token_for_booking(booking.id)
+        booking.manage_token_hash = hash_manage_token(manage_token)
 
         inspo_assets: list[BookingInspoAsset] = []
         if inspo_images:
@@ -102,18 +101,18 @@ async def create_public_booking(
                 db.add(asset)
 
         reference = f"bk_{booking.id}_{int(datetime.now(UTC).timestamp())}"
-        callback_url = f"{str(settings.frontend_url).rstrip('/')}/book/{slug}/verify?booking_id={booking.id}"
-        transaction_charge = int(deposit_amount * (float(tenant.platform_fee_percentage) / 100))
+        manage_url = manage_url_for_booking(slug, booking.id, manage_token)
+        callback_url = f"{str(settings.frontend_url).rstrip('/')}/book/{slug}/verify?booking_id={booking.id}&token={manage_token}"
         try:
-            paystack_data = await initialize_transaction(
+            paystack_data, payment_plan = await initialize_checkout_payment(
                 email=payload.client.email,
                 amount=deposit_amount,
                 reference=reference,
-                subaccount=tenant.paystack_subaccount_code,
-                transaction_charge=transaction_charge,
+                tenant=tenant,
                 callback_url=callback_url,
                 metadata={
                     "booking_id": str(booking.id),
+                    "manage_url": manage_url,
                     "tenant_id": str(tenant.id),
                     "service_name": service.name,
                     "staff_name": locked_staff.name,
@@ -137,6 +136,11 @@ async def create_public_booking(
             paystack_access_code=paystack_data.get("access_code"),
             status="pending",
             payment_type=payment_type,
+            provider=payment_plan.provider,
+            collection_mode=payment_plan.collection_mode,
+            platform_fee_amount=payment_plan.platform_fee_amount,
+            business_net_amount=payment_plan.business_net_amount,
+            settlement_status="not_due",
         )
         db.add(payment)
 
@@ -146,6 +150,7 @@ async def create_public_booking(
         payment_url=paystack_data["authorization_url"],
         reference=reference,
         deposit_amount=deposit_amount,
+        manage_url=manage_url,
         expires_at=datetime.now(UTC) + timedelta(minutes=15),
     )
 

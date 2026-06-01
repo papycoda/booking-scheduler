@@ -12,7 +12,7 @@ os.environ.setdefault("REDIS_URL", "redis://localhost:6379")
 os.environ.setdefault("PAYSTACK_SECRET_KEY", "sk_test_x")
 
 from app.routers import tenants as tenant_router  # noqa: E402
-from app.schemas.tenant import PaystackOnboardingRequest  # noqa: E402
+from app.schemas.tenant import PayoutSetupRequest, PaystackOnboardingRequest  # noqa: E402
 from app.services.paystack_service import PaystackError  # noqa: E402
 
 
@@ -39,9 +39,11 @@ class FakeTenantSession:
 class TenantRouterTests(unittest.IsolatedAsyncioTestCase):
     def setUp(self) -> None:
         self.original_create_subaccount = tenant_router.create_subaccount
+        self.original_create_transfer_recipient = tenant_router.create_transfer_recipient
 
     def tearDown(self) -> None:
         tenant_router.create_subaccount = self.original_create_subaccount
+        tenant_router.create_transfer_recipient = self.original_create_transfer_recipient
 
     async def test_onboard_paystack_stores_subaccount_on_current_tenant(self):
         tenant = SimpleNamespace(
@@ -49,6 +51,11 @@ class TenantRouterTests(unittest.IsolatedAsyncioTestCase):
             platform_fee_percentage=Decimal("5.00"),
             paystack_subaccount_code=None,
             paystack_business_name=None,
+            payout_bank_code=None,
+            payout_account_number=None,
+            payout_account_name=None,
+            payout_recipient_code=None,
+            payment_setup_status="not_started",
         )
         captured = {}
 
@@ -73,10 +80,21 @@ class TenantRouterTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(captured["percentage_charge"], 5.0)
         self.assertEqual(tenant.paystack_subaccount_code, "ACCT_test")
         self.assertEqual(tenant.paystack_business_name, "Ada Hair")
+        self.assertEqual(tenant.payment_setup_status, "split_ready")
         self.assertTrue(response.onboarded)
 
     async def test_onboard_paystack_maps_paystack_failure_to_502(self):
-        tenant = SimpleNamespace(id=uuid4(), platform_fee_percentage=Decimal("5.00"))
+        tenant = SimpleNamespace(
+            id=uuid4(),
+            platform_fee_percentage=Decimal("5.00"),
+            paystack_subaccount_code=None,
+            paystack_business_name=None,
+            payout_bank_code=None,
+            payout_account_number=None,
+            payout_account_name=None,
+            payout_recipient_code=None,
+            payment_setup_status="not_started",
+        )
 
         async def create_subaccount(**_kwargs):
             raise PaystackError("failed")
@@ -96,3 +114,38 @@ class TenantRouterTests(unittest.IsolatedAsyncioTestCase):
 
         self.assertEqual(getattr(raised.exception, "status_code", None), 502)
         self.assertEqual(raised.exception.detail["error"], "PAYSTACK_SUBACCOUNT_FAILED")
+
+    async def test_save_payout_setup_accepts_bank_details_without_subaccount(self):
+        tenant = SimpleNamespace(
+            id=uuid4(),
+            payout_bank_code=None,
+            payout_account_number=None,
+            payout_account_name=None,
+            payout_recipient_code=None,
+            payment_setup_status="not_started",
+        )
+
+        async def create_transfer_recipient(**_kwargs):
+            return {"recipient_code": "RCP_test"}
+
+        tenant_router.create_transfer_recipient = create_transfer_recipient
+        db = FakeTenantSession(tenant)
+
+        response = await tenant_router.save_payout_setup(
+            PayoutSetupRequest(
+                bank_code="058",
+                account_number="0123456789",
+                account_name="Ada Hair Ltd",
+            ),
+            SimpleNamespace(tenant_id=tenant.id),
+            db,
+        )
+
+        self.assertTrue(db.committed)
+        self.assertEqual(tenant.payout_bank_code, "058")
+        self.assertEqual(tenant.payout_account_number, "0123456789")
+        self.assertEqual(tenant.payout_account_name, "Ada Hair Ltd")
+        self.assertEqual(tenant.payout_recipient_code, "RCP_test")
+        self.assertEqual(tenant.payment_setup_status, "bank_added")
+        self.assertTrue(response.payments_enabled)
+        self.assertTrue(response.payout_ready)

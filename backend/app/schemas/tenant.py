@@ -15,6 +15,11 @@ class TenantResponse(BaseModel):
     address: str | None = None
     paystack_subaccount_code: str | None = None
     paystack_business_name: str | None = None
+    payout_bank_code: str | None = None
+    payout_account_number: str | None = None
+    payout_account_name: str | None = None
+    payout_recipient_code: str | None = None
+    payment_setup_status: str = "not_started"
     platform_fee_percentage: Decimal
     allow_staff_selection: bool
     booking_buffer_minutes: int
@@ -49,7 +54,20 @@ class PaystackOnboardingRequest(BaseModel):
     account_number: str = Field(pattern=r"^[0-9]{10}$")
 
 
+class PayoutSetupRequest(BaseModel):
+    bank_code: str = Field(min_length=2, max_length=20)
+    account_number: str = Field(pattern=r"^[0-9]{10}$")
+    account_name: str | None = Field(default=None, min_length=2, max_length=255)
+
+
 class PaystackStatusResponse(BaseModel):
     paystack_subaccount_code: str | None = None
     paystack_business_name: str | None = None
+    payout_bank_code: str | None = None
+    payout_account_number: str | None = None
+    payout_account_name: str | None = None
+    payout_recipient_code: str | None = None
+    payment_setup_status: str = "not_started"
+    payments_enabled: bool = True
+    payout_ready: bool = False
     onboarded: bool

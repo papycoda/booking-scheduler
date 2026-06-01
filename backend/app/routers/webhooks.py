@@ -62,6 +62,8 @@ async def paystack_webhook(
             from datetime import UTC, datetime
 
             payment.paid_at = datetime.now(UTC)
+            if getattr(payment, "collection_mode", "platform_collected") == "platform_collected":
+                payment.settlement_status = "pending"
             booking.status = "confirmed"
             await db.commit()
             background_tasks.add_task(send_booking_confirmation_for_booking, booking.id)
