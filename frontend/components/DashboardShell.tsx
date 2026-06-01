@@ -12,7 +12,7 @@ const links = [
   ["Availability", "/dashboard/availability"],
 ];
 
-export function DashboardShell({ title, children }: { title: string; children: React.ReactNode }) {
+export function DashboardShell({ children }: { title: string; children: React.ReactNode }) {
   const pathname = usePathname();
   const [isAuthorized, setIsAuthorized] = useState(false);
 
@@ -32,13 +32,7 @@ export function DashboardShell({ title, children }: { title: string; children: R
   }
 
   if (!isAuthorized) {
-    return (
-      <main className="page-shell">
-        <section className="dashboard-card p-5">
-          <p className="muted">Checking session...</p>
-        </section>
-      </main>
-    );
+    return null;
   }
 
   return (
@@ -48,7 +42,7 @@ export function DashboardShell({ title, children }: { title: string; children: R
           <span className="grid h-10 w-10 place-items-center rounded-xl bg-[#0e4731] text-lg font-black text-white shadow-sm">B</span>
           <span className="grid gap-0.5">
             <span className="text-xl font-bold leading-none tracking-normal">Bookie</span>
-            <span className="text-[10px] font-bold uppercase tracking-[0.18em] text-action">Business dashboard</span>
+            <span className="text-[10px] font-bold uppercase tracking-[0.18em] text-action">Business manager</span>
           </span>
         </Link>
 
@@ -74,11 +68,7 @@ export function DashboardShell({ title, children }: { title: string; children: R
       </header>
 
       <section className="dashboard-card overflow-hidden">
-        <div className="flex flex-col gap-4 p-5 sm:flex-row sm:items-center sm:justify-between sm:p-6">
-          <div>
-            <p className="eyebrow">Current section</p>
-            <h1 className="mt-1 text-2xl font-bold tracking-normal text-ink">{title}</h1>
-          </div>
+        <div className="p-3 sm:p-4">
           <nav className="flex gap-1 overflow-x-auto rounded-xl border border-line/60 bg-field/80 p-1">
             {links.map(([label, href]) => {
               const isActive = href === "/dashboard" ? pathname === href : pathname.startsWith(href);
