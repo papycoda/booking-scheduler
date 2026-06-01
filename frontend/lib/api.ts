@@ -13,7 +13,13 @@ async function request<T>(path: string, options: ApiOptions = {}): Promise<T> {
   });
   if (!response.ok) {
     const body = await response.json().catch(() => ({}));
-    throw new Error(body?.detail?.message ?? "Request failed");
+    if ((response.status === 401 || response.status === 403) && options.token && typeof window !== "undefined") {
+      clearAccessToken();
+      const next = encodeURIComponent(`${window.location.pathname}${window.location.search}`);
+      window.location.replace(`/login?next=${next}`);
+    }
+    const detail = body?.detail;
+    throw new Error((typeof detail === "object" && detail?.message) || (typeof detail === "string" ? detail : "Request failed"));
   }
   if (response.status === 204) return undefined as T;
   return response.json() as Promise<T>;
