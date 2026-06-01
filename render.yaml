@@ -7,7 +7,8 @@ services:
     autoDeploy: true
     healthCheckPath: /health
     buildCommand: pip install -r backend/requirements.txt
-    startCommand: PYTHONPATH=backend python -m alembic -c backend/alembic.ini upgrade head && PYTHONPATH=backend uvicorn app.main:app --host 0.0.0.0 --port $PORT
+    preDeployCommand: PYTHONPATH=backend python -m alembic -c backend/alembic.ini upgrade head
+    startCommand: PYTHONPATH=backend uvicorn app.main:app --host 0.0.0.0 --port $PORT
     envVars:
       - key: ENVIRONMENT
         value: production
@@ -18,8 +19,9 @@ services:
           name: booking-scheduler-postgres
           property: connectionString
       - key: REDIS_URL
-        fromDatabase:
+        fromService:
           name: booking-scheduler-redis
+          type: keyvalue
           property: connectionString
       - key: FRONTEND_URL
         sync: false
@@ -56,15 +58,16 @@ services:
       - key: NEXT_PUBLIC_API_BASE_URL
         sync: false
 
+  - type: keyvalue
+    name: booking-scheduler-redis
+    plan: free
+    maxmemoryPolicy: allkeys-lru
+    ipAllowList: []
+
 databases:
   - name: booking-scheduler-postgres
     databaseName: booking_scheduler
     user: booking_scheduler
     plan: free
     postgresMajorVersion: "15"
-    ipAllowList: []
-
-  - name: booking-scheduler-redis
-    plan: free
-    maxmemoryPolicy: allkeys-lru
     ipAllowList: []
