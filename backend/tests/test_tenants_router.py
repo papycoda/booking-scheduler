@@ -12,7 +12,7 @@ os.environ.setdefault("REDIS_URL", "redis://localhost:6379")
 os.environ.setdefault("PAYSTACK_SECRET_KEY", "sk_test_x")
 
 from app.routers import tenants as tenant_router  # noqa: E402
-from app.schemas.tenant import PayoutSetupRequest, PaystackOnboardingRequest  # noqa: E402
+from app.schemas.tenant import PayoutSetupRequest, PaystackOnboardingRequest, TenantUpdateRequest  # noqa: E402
 from app.services.paystack_service import PaystackError  # noqa: E402
 
 
@@ -25,15 +25,24 @@ class FakeScalarResult:
 
 
 class FakeTenantSession:
-    def __init__(self, tenant):
+    def __init__(self, tenant, conflict_id=None):
         self.tenant = tenant
+        self.conflict_id = conflict_id
         self.committed = False
+        self.refreshed = False
+        self.execute_count = 0
 
     async def execute(self, _stmt):
+        self.execute_count += 1
+        if self.execute_count == 2:
+            return FakeScalarResult(self.conflict_id)
         return FakeScalarResult(self.tenant)
 
     async def commit(self):
         self.committed = True
+
+    async def refresh(self, _tenant):
+        self.refreshed = True
 
 
 class TenantRouterTests(unittest.IsolatedAsyncioTestCase):
@@ -44,6 +53,43 @@ class TenantRouterTests(unittest.IsolatedAsyncioTestCase):
     def tearDown(self) -> None:
         tenant_router.create_subaccount = self.original_create_subaccount
         tenant_router.create_transfer_recipient = self.original_create_transfer_recipient
+
+    async def test_update_current_tenant_allows_available_custom_slug(self):
+        tenant = SimpleNamespace(
+            id=uuid4(),
+            slug="ada-hair",
+            name="Ada Hair",
+        )
+        db = FakeTenantSession(tenant)
+
+        response = await tenant_router.update_current_tenant(
+            TenantUpdateRequest(slug="Ada Hair Prime", name="Ada Hair Prime"),
+            SimpleNamespace(tenant_id=tenant.id),
+            db,
+        )
+
+        self.assertTrue(db.committed)
+        self.assertTrue(db.refreshed)
+        self.assertEqual(response.slug, "ada-hair-prime")
+        self.assertEqual(response.name, "Ada Hair Prime")
+
+    async def test_update_current_tenant_rejects_taken_slug(self):
+        tenant = SimpleNamespace(
+            id=uuid4(),
+            slug="ada-hair",
+            name="Ada Hair",
+        )
+
+        with self.assertRaises(Exception) as raised:
+            await tenant_router.update_current_tenant(
+                TenantUpdateRequest(slug="Taken Slug"),
+                SimpleNamespace(tenant_id=tenant.id),
+                FakeTenantSession(tenant, conflict_id=uuid4()),
+            )
+
+        self.assertEqual(getattr(raised.exception, "status_code", None), 409)
+        self.assertEqual(raised.exception.detail["error"], "SLUG_UNAVAILABLE")
+        self.assertEqual(tenant.slug, "ada-hair")
 
     async def test_onboard_paystack_stores_subaccount_on_current_tenant(self):
         tenant = SimpleNamespace(

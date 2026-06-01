@@ -9,6 +9,7 @@ from app.dependencies import get_current_user
 from app.models.tenant import Tenant
 from app.models.user import User
 from app.schemas.tenant import PayoutSetupRequest, PaystackOnboardingRequest, PaystackStatusResponse, TenantResponse, TenantUpdateRequest
+from app.services.auth_service import slugify_business_name
 from app.services.paystack_service import PaystackError, create_subaccount, create_transfer_recipient
 
 router = APIRouter(prefix="/tenants", tags=["tenants"])
@@ -40,7 +41,18 @@ async def update_current_tenant(
     db: Annotated[AsyncSession, Depends(get_db)],
 ) -> Tenant:
     tenant = await get_current_tenant(db, current_user)
-    for field, value in payload.model_dump(exclude_unset=True).items():
+    data = payload.model_dump(exclude_unset=True)
+    if "slug" in data:
+        requested_slug = slugify_business_name(str(data.pop("slug")))
+        if requested_slug != tenant.slug:
+            existing = await db.execute(select(Tenant.id).where(Tenant.slug == requested_slug, Tenant.id != tenant.id))
+            if existing.scalar_one_or_none() is not None:
+                raise HTTPException(
+                    status_code=status.HTTP_409_CONFLICT,
+                    detail={"error": "SLUG_UNAVAILABLE", "message": "That booking URL is already taken."},
+                )
+            tenant.slug = requested_slug
+    for field, value in data.items():
         setattr(tenant, field, value)
     await db.commit()
     await db.refresh(tenant)

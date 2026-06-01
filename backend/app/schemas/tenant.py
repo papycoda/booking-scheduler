@@ -33,6 +33,7 @@ class TenantResponse(BaseModel):
 
 
 class TenantUpdateRequest(BaseModel):
+    slug: str | None = Field(default=None, min_length=2, max_length=100)
     name: str | None = Field(default=None, min_length=2, max_length=255)
     description: str | None = None
     logo_url: str | None = Field(default=None, max_length=500)

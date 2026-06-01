@@ -7,35 +7,51 @@ import { DashboardShell } from "../../../components/DashboardShell";
 export default function SettingsPage() {
   const [tenant, setTenant] = useState<Tenant | null>(null);
   const [paymentStatus, setPaymentStatus] = useState<PaymentSetupStatus | null>(null);
+  const [slugDraft, setSlugDraft] = useState("");
+  const [publicOrigin, setPublicOrigin] = useState("");
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
 
   useEffect(() => {
+    setPublicOrigin(window.location.origin);
     Promise.all([api.currentTenant(), api.paystackStatus()])
       .then(([tenantRow, status]) => {
         setTenant(tenantRow);
+        setSlugDraft(tenantRow.slug);
         setPaymentStatus(status);
       })
       .catch((err) => setError(err.message));
   }, []);
 
+  function slugify(value: string) {
+    return value.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 100);
+  }
+
   async function saveSettings(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    setError("");
+    setMessage("");
     const form = new FormData(event.currentTarget);
-    const updated = await api.updateTenant({
-      name: form.get("name"),
-      description: form.get("description") || null,
-      phone: form.get("phone") || null,
-      address: form.get("address") || null,
-      timezone: form.get("timezone"),
-      allow_staff_selection: form.get("allow_staff_selection") === "on",
-      advance_booking_days: Number(form.get("advance_booking_days")),
-      default_deposit_amount: ngnToKobo(form.get("default_deposit_amount")),
-      min_notice_hours: Number(form.get("min_notice_hours")),
-      cancellation_notice_hours: Number(form.get("cancellation_notice_hours")),
-    });
-    setTenant(updated);
-    setMessage("Settings saved");
+    try {
+      const updated = await api.updateTenant({
+        slug: slugDraft,
+        name: form.get("name"),
+        description: form.get("description") || null,
+        phone: form.get("phone") || null,
+        address: form.get("address") || null,
+        timezone: form.get("timezone"),
+        allow_staff_selection: form.get("allow_staff_selection") === "on",
+        advance_booking_days: Number(form.get("advance_booking_days")),
+        default_deposit_amount: ngnToKobo(form.get("default_deposit_amount")),
+        min_notice_hours: Number(form.get("min_notice_hours")),
+        cancellation_notice_hours: Number(form.get("cancellation_notice_hours")),
+      });
+      setTenant(updated);
+      setSlugDraft(updated.slug);
+      setMessage("Settings saved");
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Could not save settings");
+    }
   }
 
   async function savePayoutSetup(event: FormEvent<HTMLFormElement>) {
@@ -89,6 +105,7 @@ export default function SettingsPage() {
   }
 
   const setupStatus = paymentStatus?.payment_setup_status ?? tenant?.payment_setup_status ?? "not_started";
+  const publicBookingUrl = `${publicOrigin}/book/${slugDraft || tenant?.slug || ""}`;
   const payoutStatusCopy =
     setupStatus === "split_ready"
       ? "Direct split ready. Future checkout payments can route business funds directly."
@@ -103,6 +120,46 @@ export default function SettingsPage() {
           <p className="eyebrow">Business profile</p>
           <h2 className="section-title">Booking rules and display details</h2>
         </div>
+        <section className="grid gap-3 border-b border-line/80 pb-4 sm:col-span-2">
+          <div>
+            <p className="eyebrow">Public booking link</p>
+            <h3 className="font-semibold text-ink">Custom URL</h3>
+          </div>
+          <div className="grid gap-3 lg:grid-cols-[1fr_auto_auto]">
+            <label className="grid gap-2 text-sm font-semibold text-ink/75">
+              Booking URL slug
+              <input
+                name="slug"
+                value={slugDraft}
+                onChange={(event) => setSlugDraft(slugify(event.target.value))}
+                placeholder="studio-ayo"
+                required
+              />
+            </label>
+            <button
+              className="secondary-button self-end"
+              type="button"
+              onClick={() => setSlugDraft(slugify(tenant?.name || "bookie-business"))}
+            >
+              Generate
+            </button>
+            <button
+              className="secondary-button self-end"
+              type="button"
+              onClick={async () => {
+                await navigator.clipboard?.writeText(publicBookingUrl);
+                setMessage("Booking link copied");
+              }}
+              disabled={!slugDraft}
+            >
+              Copy link
+            </button>
+          </div>
+          <a className="text-sm font-semibold text-action underline-offset-4 hover:underline" href={publicBookingUrl} target="_blank" rel="noreferrer">
+            {publicBookingUrl}
+          </a>
+          <p className="muted">This is the link clients use to book without creating an account.</p>
+        </section>
         <label className="grid gap-2 text-sm font-semibold text-ink/75">
           Business name
           <input name="name" placeholder="Le'Test" defaultValue={tenant?.name ?? ""} required />
