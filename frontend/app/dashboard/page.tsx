@@ -97,12 +97,24 @@ export default function DashboardPage() {
                         )}
                       </td>
                       <td className="p-3">
-                        <div className="flex flex-wrap gap-2">
-                          {(booking.inspo_assets ?? []).map((asset) => (
-                            <a key={asset.id} href={apiAssetUrl(asset.url)} target="_blank" rel="noreferrer" className="text-action underline">
-                              {asset.original_filename}
-                            </a>
-                          ))}
+                        <div className="flex flex-wrap -space-x-2">
+                          {(booking.inspo_assets ?? []).map((asset) => {
+                            const imageUrl = apiAssetUrl(asset.url);
+                            return (
+                              <a key={asset.id} href={imageUrl} target="_blank" rel="noreferrer" className="group relative inline-block">
+                                <img
+                                  src={imageUrl}
+                                  alt={asset.original_filename}
+                                  className="h-9 w-9 rounded-full border-2 border-white object-cover shadow-sm transition group-hover:z-10 group-hover:scale-105"
+                                />
+                                <span className="pointer-events-none absolute left-1/2 top-11 z-20 hidden w-36 -translate-x-1/2 rounded-xl border border-white bg-white p-1 shadow-[0_18px_36px_rgba(14,71,49,0.18)] group-hover:block">
+                                  <img src={imageUrl} alt="" className="h-28 w-full rounded-lg object-cover" />
+                                  <span className="mt-1 block truncate px-1 text-[10px] font-semibold text-ink/65">{asset.original_filename}</span>
+                                </span>
+                              </a>
+                            );
+                          })}
+                          {(booking.inspo_assets ?? []).length === 0 && <span className="text-xs text-ink/45">None</span>}
                         </div>
                       </td>
                       <td className="flex gap-2 p-3">

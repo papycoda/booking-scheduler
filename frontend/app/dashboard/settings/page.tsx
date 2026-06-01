@@ -115,19 +115,42 @@ export default function SettingsPage() {
 
   return (
     <DashboardShell title="Settings">
-      <form onSubmit={saveSettings} className="panel grid gap-3 sm:grid-cols-2">
+      <section className="grid gap-6 lg:grid-cols-[240px_1fr]">
+        <aside className="dashboard-card hidden h-fit p-4 lg:sticky lg:top-6 lg:block">
+          <p className="eyebrow">Settings</p>
+          <nav className="mt-4 grid gap-1">
+            {[
+              ["Booking link", "#booking-link"],
+              ["Business profile", "#business-profile"],
+              ["Payments", "#payments"],
+              ["Payout account", "#payout-account"],
+              ["Direct split", "#direct-split"],
+            ].map(([label, href]) => (
+              <a key={href} href={href} className="rounded-xl px-3 py-2 text-sm font-semibold text-ink/65 transition hover:bg-field hover:text-action">
+                {label}
+              </a>
+            ))}
+          </nav>
+        </aside>
+
+        <div className="grid gap-6">
+      <form id="business-profile" onSubmit={saveSettings} className="dashboard-card grid gap-5 p-5 sm:grid-cols-2">
         <div className="sm:col-span-2">
           <p className="eyebrow">Business profile</p>
           <h2 className="section-title">Booking rules and display details</h2>
         </div>
-        <section className="grid gap-3 border-b border-line/80 pb-4 sm:col-span-2">
+        <section id="booking-link" className="grid gap-3 rounded-2xl border border-line/70 bg-[#fcfdfe] p-4 sm:col-span-2">
           <div>
             <p className="eyebrow">Public booking link</p>
             <h3 className="font-semibold text-ink">Custom URL</h3>
           </div>
-          <div className="grid gap-3 lg:grid-cols-[1fr_auto_auto]">
+          <div className="grid gap-3 lg:grid-cols-[auto_1fr_auto_auto] lg:items-end">
             <label className="grid gap-2 text-sm font-semibold text-ink/75">
-              Booking URL slug
+              Base
+              <input readOnly value={`${publicOrigin}/book/`} className="bg-white text-ink/55" />
+            </label>
+            <label className="grid gap-2 text-sm font-semibold text-ink/75">
+              Slug
               <input
                 name="slug"
                 value={slugDraft}
@@ -206,7 +229,7 @@ export default function SettingsPage() {
         </label>
         <button type="submit">Save Settings</button>
       </form>
-      <section className="panel grid gap-3">
+      <section id="payments" className="dashboard-card grid gap-4 p-5">
         <div>
           <p className="eyebrow">Payments</p>
           <h2 className="section-title">Collection and payout status</h2>
@@ -227,7 +250,7 @@ export default function SettingsPage() {
         </div>
         <p className="muted">{payoutStatusCopy}</p>
       </section>
-      <form onSubmit={savePayoutSetup} className="panel grid gap-3 sm:grid-cols-4">
+      <form id="payout-account" onSubmit={savePayoutSetup} className="finance-card grid gap-4 sm:grid-cols-4">
         <div className="sm:col-span-4">
           <p className="eyebrow">Payout account</p>
           <h2 className="section-title">Add bank details without Paystack setup</h2>
@@ -246,7 +269,7 @@ export default function SettingsPage() {
         </label>
         <button type="submit">Save payout account</button>
       </form>
-      <form onSubmit={onboardPaystack} className="panel grid gap-3 sm:grid-cols-4">
+      <form id="direct-split" onSubmit={onboardPaystack} className="finance-card grid gap-4 sm:grid-cols-4">
         <div className="sm:col-span-4">
           <p className="eyebrow">Payments</p>
           <h2 className="section-title">Optional direct split settlement</h2>
@@ -267,6 +290,8 @@ export default function SettingsPage() {
       </form>
       {message && <p className="text-sm text-action">{message}</p>}
       {error && <p className="text-sm text-red-700">{error}</p>}
+        </div>
+      </section>
     </DashboardShell>
   );
 }
