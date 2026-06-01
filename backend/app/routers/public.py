@@ -3,7 +3,7 @@ from datetime import UTC, date, datetime, timedelta
 from typing import Annotated
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException, Query, Request, UploadFile, status
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response, UploadFile, status
 from pydantic import ValidationError
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -11,7 +11,7 @@ from starlette.datastructures import UploadFile as StarletteUploadFile
 
 from app.database import get_db, set_tenant_context
 from app.middleware.rate_limiter import limiter
-from app.models.booking import Booking
+from app.models.booking import Booking, BookingInspoAsset
 from app.models.payment import Payment
 from app.models.service import Service, staff_services
 from app.models.staff import Staff
@@ -175,6 +175,27 @@ async def public_booking_status(
         price_status=booking.price_status,
         quoted_price=booking.quoted_price,
     )
+
+
+@router.get("/{slug}/inspo/{stored_filename}")
+@limiter.limit("120/minute")
+async def public_inspo_asset(
+    request: Request,
+    slug: str,
+    stored_filename: str,
+    db: Annotated[AsyncSession, Depends(get_db)],
+) -> Response:
+    tenant = await get_public_tenant(db, slug)
+    result = await db.execute(
+        select(BookingInspoAsset).where(
+            BookingInspoAsset.tenant_id == tenant.id,
+            BookingInspoAsset.stored_filename == stored_filename,
+        )
+    )
+    asset = result.scalar_one_or_none()
+    if asset is None or asset.data is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail={"error": "INSPO_NOT_FOUND", "message": "Inspiration image was not found."})
+    return Response(content=asset.data, media_type=asset.content_type)
 
 
 @router.post("/{slug}/bookings/{booking_id}/cancel", status_code=204)

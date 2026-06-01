@@ -83,3 +83,22 @@ class PublicRouterTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(resolved, tenant)
         self.assertEqual(db.statements[1][1], {"tenant_id": str(tenant.id)})
         self.assertIn("set_config('app.current_tenant_id'", db.statements[1][0])
+
+    async def test_public_inspo_asset_returns_database_image_bytes(self):
+        tenant = SimpleNamespace(id=uuid4())
+        asset = SimpleNamespace(data=b"image-bytes", content_type="image/jpeg")
+
+        async def get_public_tenant(_db, _slug):
+            return tenant
+
+        public_router.get_public_tenant = get_public_tenant
+
+        response = await public_router.public_inspo_asset.__wrapped__(
+            SimpleNamespace(),
+            "tenant-slug",
+            "stored-id",
+            FakeSession([FakeResult(scalar=asset)]),
+        )
+
+        self.assertEqual(response.body, b"image-bytes")
+        self.assertEqual(response.media_type, "image/jpeg")

@@ -39,10 +39,6 @@ services:
         sync: false
       - key: META_WHATSAPP_BUSINESS_ACCOUNT_ID
         sync: false
-      - key: UPLOAD_DIR
-        value: /tmp/booking-scheduler-uploads
-      - key: UPLOAD_BASE_URL
-        value: /uploads
 
   - type: web
     name: booking-scheduler-frontend

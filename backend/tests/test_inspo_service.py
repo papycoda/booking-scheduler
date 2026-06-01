@@ -1,7 +1,5 @@
 import os
-import tempfile
 import unittest
-from pathlib import Path
 from uuid import uuid4
 
 os.environ.setdefault("SECRET_KEY", "a" * 64)
@@ -27,39 +25,25 @@ class FakeUploadFile:
 
 class InspoServiceTests(unittest.IsolatedAsyncioTestCase):
     async def test_save_inspo_images_rejects_non_images(self):
-        with tempfile.TemporaryDirectory() as temp_dir:
-            original_dir = settings.upload_dir
-            settings.upload_dir = temp_dir
-            try:
-                with self.assertRaises(Exception) as raised:
-                    await save_inspo_images(
-                        tenant_id=uuid4(),
-                        booking_id=uuid4(),
-                        files=[FakeUploadFile("notes.txt", "text/plain", b"not image")],
-                    )
-            finally:
-                settings.upload_dir = original_dir
+        with self.assertRaises(Exception) as raised:
+            await save_inspo_images(
+                tenant_id=uuid4(),
+                booking_id=uuid4(),
+                slug="tenant-slug",
+                files=[FakeUploadFile("notes.txt", "text/plain", b"not image")],
+            )
 
         self.assertEqual(getattr(raised.exception, "status_code", None), 415)
 
-    async def test_save_inspo_images_stores_metadata_and_file(self):
-        with tempfile.TemporaryDirectory() as temp_dir:
-            original_dir = settings.upload_dir
-            original_base_url = settings.upload_base_url
-            settings.upload_dir = temp_dir
-            settings.upload_base_url = "/uploads"
-            tenant_id = uuid4()
-            booking_id = uuid4()
-            try:
-                assets = await save_inspo_images(
-                    tenant_id=tenant_id,
-                    booking_id=booking_id,
-                    files=[FakeUploadFile("style.jpg", "image/jpeg", b"image-bytes")],
-                )
-                stored_path_exists = Path(temp_dir, str(tenant_id), str(booking_id), assets[0].stored_filename).exists()
-            finally:
-                settings.upload_dir = original_dir
-                settings.upload_base_url = original_base_url
+    async def test_save_inspo_images_stores_metadata_and_bytes(self):
+        tenant_id = uuid4()
+        booking_id = uuid4()
+        assets = await save_inspo_images(
+            tenant_id=tenant_id,
+            booking_id=booking_id,
+            slug="tenant-slug",
+            files=[FakeUploadFile("style.jpg", "image/jpeg", b"image-bytes")],
+        )
 
         asset = assets[0]
         self.assertEqual(asset.tenant_id, tenant_id)
@@ -67,5 +51,5 @@ class InspoServiceTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(asset.original_filename, "style.jpg")
         self.assertEqual(asset.content_type, "image/jpeg")
         self.assertEqual(asset.size_bytes, len(b"image-bytes"))
-        self.assertTrue(asset.url.startswith(f"/uploads/{tenant_id}/{booking_id}/"))
-        self.assertTrue(stored_path_exists)
+        self.assertEqual(asset.data, b"image-bytes")
+        self.assertTrue(asset.url.startswith("/book/tenant-slug/inspo/"))

@@ -1,5 +1,4 @@
 from datetime import UTC, datetime, timedelta
-from pathlib import Path
 from uuid import UUID
 
 from fastapi import HTTPException, status
@@ -98,7 +97,7 @@ async def create_public_booking(
 
         inspo_assets: list[BookingInspoAsset] = []
         if inspo_images:
-            inspo_assets = await save_inspo_images(tenant_id=tenant.id, booking_id=booking.id, files=inspo_images)
+            inspo_assets = await save_inspo_images(tenant_id=tenant.id, booking_id=booking.id, slug=slug, files=inspo_images)
             for asset in inspo_assets:
                 db.add(asset)
 
@@ -124,7 +123,6 @@ async def create_public_booking(
                 },
             )
         except PaystackError:
-            cleanup_saved_inspo_files(tenant.id, booking.id, inspo_assets)
             raise HTTPException(
                 status_code=status.HTTP_502_BAD_GATEWAY,
                 detail={"error": "PAYSTACK_INIT_FAILED", "message": "Could not initialize payment."},
@@ -208,9 +206,3 @@ async def choose_staff_with_fewest_bookings(db: AsyncSession, tenant_id: UUID, s
     for staff_id, count in result.all():
         counts[staff_id] = count
     return min(counts, key=counts.get)
-
-
-def cleanup_saved_inspo_files(tenant_id: UUID, booking_id: UUID, assets: list[BookingInspoAsset]) -> None:
-    for asset in assets:
-        path = Path(settings.upload_dir) / str(tenant_id) / str(booking_id) / asset.stored_filename
-        path.unlink(missing_ok=True)

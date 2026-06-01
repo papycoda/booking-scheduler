@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { api, DashboardBooking, AnalyticsOverview } from "../../lib/api";
+import { api, apiAssetUrl, DashboardBooking, AnalyticsOverview } from "../../lib/api";
 import { DashboardShell } from "../../components/DashboardShell";
 
 export default function DashboardPage() {
@@ -67,7 +67,7 @@ export default function DashboardPage() {
                 <td className="p-3">
                   <div className="flex flex-wrap gap-2">
                     {(booking.inspo_assets ?? []).map((asset) => (
-                      <a key={asset.id} href={asset.url} target="_blank" rel="noreferrer" className="text-action underline">
+                      <a key={asset.id} href={apiAssetUrl(asset.url)} target="_blank" rel="noreferrer" className="text-action underline">
                         {asset.original_filename}
                       </a>
                     ))}

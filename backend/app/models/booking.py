@@ -1,7 +1,7 @@
 import uuid
 from datetime import datetime
 
-from sqlalchemy import CheckConstraint, DateTime, ForeignKey, Index, Integer, String, Text, UniqueConstraint, text
+from sqlalchemy import CheckConstraint, DateTime, ForeignKey, Index, Integer, LargeBinary, String, Text, UniqueConstraint, text
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -74,4 +74,5 @@ class BookingInspoAsset(UUIDPrimaryKeyMixin, Base):
     content_type: Mapped[str] = mapped_column(String(100), nullable=False)
     size_bytes: Mapped[int] = mapped_column(Integer, nullable=False)
     url: Mapped[str] = mapped_column(String(500), nullable=False)
+    data: Mapped[bytes | None] = mapped_column(LargeBinary)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, server_default=text("NOW()"))

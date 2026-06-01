@@ -44,6 +44,7 @@ def upgrade() -> None:
             content_type VARCHAR(100) NOT NULL,
             size_bytes INTEGER NOT NULL,
             url VARCHAR(500) NOT NULL,
+            data BYTEA,
             created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW() NOT NULL,
             id UUID DEFAULT uuid_generate_v4() NOT NULL PRIMARY KEY
         )

@@ -11,6 +11,8 @@ Use the root `render.yaml` Blueprint to provision:
 - `booking-scheduler-postgres` Postgres database
 - `booking-scheduler-redis` Render Key Value instance
 
+Style inspiration uploads are stored in Postgres-backed booking asset rows, so they persist across web service restarts.
+
 Deploy from:
 
 ```text

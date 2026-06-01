@@ -1,4 +1,3 @@
-from pathlib import Path
 from uuid import UUID, uuid4
 
 from fastapi import HTTPException, UploadFile, status
@@ -7,7 +6,7 @@ from app.config import settings
 from app.models.booking import BookingInspoAsset
 
 
-async def save_inspo_images(*, tenant_id: UUID, booking_id: UUID, files: list[UploadFile]) -> list[BookingInspoAsset]:
+async def save_inspo_images(*, tenant_id: UUID, booking_id: UUID, slug: str, files: list[UploadFile]) -> list[BookingInspoAsset]:
     if len(files) > settings.max_inspo_images:
         raise HTTPException(
             status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
@@ -15,8 +14,6 @@ async def save_inspo_images(*, tenant_id: UUID, booking_id: UUID, files: list[Up
         )
 
     total_size = 0
-    upload_root = Path(settings.upload_dir) / str(tenant_id) / str(booking_id)
-    upload_root.mkdir(parents=True, exist_ok=True)
     assets: list[BookingInspoAsset] = []
 
     for file in files:
@@ -36,11 +33,7 @@ async def save_inspo_images(*, tenant_id: UUID, booking_id: UUID, files: list[Up
                 detail={"error": "INSPO_IMAGE_TOO_LARGE", "message": "One or more inspiration images are too large."},
             )
 
-        suffix = Path(file.filename or "image").suffix[:20]
-        stored_filename = f"{uuid4()}{suffix}"
-        path = upload_root / stored_filename
-        path.write_bytes(content)
-        url = f"{settings.upload_base_url.rstrip('/')}/{tenant_id}/{booking_id}/{stored_filename}"
+        stored_filename = str(uuid4())
         assets.append(
             BookingInspoAsset(
                 booking_id=booking_id,
@@ -49,7 +42,8 @@ async def save_inspo_images(*, tenant_id: UUID, booking_id: UUID, files: list[Up
                 stored_filename=stored_filename,
                 content_type=content_type,
                 size_bytes=size,
-                url=url,
+                url=f"/book/{slug}/inspo/{stored_filename}",
+                data=content,
             )
         )
 

@@ -119,6 +119,11 @@ export function getAccessToken() {
   return localStorage.getItem("access_token") ?? "";
 }
 
+export function apiAssetUrl(url: string) {
+  if (/^https?:\/\//.test(url)) return url;
+  return `${API_BASE_URL.replace(/\/$/, "")}${url.startsWith("/") ? url : `/${url}`}`;
+}
+
 export const api = {
   register: (body: unknown) => request<{ access_token: string; slug: string }>("/auth/register", { method: "POST", body: JSON.stringify(body) }),
   login: (body: unknown) => request<{ access_token: string }>("/auth/login", { method: "POST", body: JSON.stringify(body) }),
