@@ -1,7 +1,7 @@
 "use client";
 
 import { FormEvent, useState } from "react";
-import { api } from "../../../lib/api";
+import { api, storeAccessToken } from "../../../lib/api";
 
 export default function RegisterPage() {
   const [error, setError] = useState("");
@@ -17,7 +17,7 @@ export default function RegisterPage() {
         email: form.get("email"),
         password: form.get("password"),
       });
-      localStorage.setItem("access_token", response.access_token);
+      storeAccessToken(response.access_token);
       window.location.href = "/dashboard";
     } catch (err) {
       setError(err instanceof Error ? err.message : "Unable to register");
