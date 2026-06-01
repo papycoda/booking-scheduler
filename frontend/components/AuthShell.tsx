@@ -91,7 +91,7 @@ export function AuthShell({
   children,
 }: AuthShellProps) {
   return (
-    <main className="relative flex min-h-screen items-center justify-center overflow-hidden bg-gradient-to-br from-[#e6eee9] via-[#dde8e2] to-[#d2e0d7] p-4 text-[#112219] md:p-12">
+    <main className="relative isolate flex min-h-screen items-center justify-center overflow-hidden bg-gradient-to-br from-[#e6eee9] via-[#dde8e2] to-[#d2e0d7] p-4 text-[#112219] md:p-12">
       <div className="pointer-events-none absolute bottom-0 left-0 z-0 h-[450px] w-80 opacity-70">
         <PlantLeft />
       </div>
@@ -106,7 +106,7 @@ export function AuthShell({
       </svg>
 
       <section className="relative z-10 grid w-full max-w-6xl grid-cols-1 items-center gap-12 px-4 lg:grid-cols-12">
-        <aside className="space-y-7 text-[#112219] lg:col-span-6">
+        <aside className="relative z-10 space-y-7 text-[#112219] lg:col-span-6">
           <div className="flex h-11 w-11 items-center justify-center rounded-xl border border-white/60 bg-white/25 text-[#2d4236] shadow-sm backdrop-blur-sm">
             <CalendarIcon />
           </div>
@@ -136,8 +136,8 @@ export function AuthShell({
           </div>
         </aside>
 
-        <section className="mx-auto w-full max-w-lg lg:col-span-6 lg:ml-auto">
-          <div className="relative rounded-2xl border border-white/70 bg-[#f7faf8]/55 p-7 shadow-[0_40px_80px_rgba(17,34,25,0.06)] backdrop-blur-2xl sm:p-9">
+        <section className="relative z-20 mx-auto w-full max-w-lg pointer-events-auto lg:col-span-6 lg:ml-auto">
+          <div className="relative z-20 rounded-2xl border border-white/70 bg-[#f8fbf9]/75 p-7 shadow-[0_40px_80px_rgba(17,34,25,0.06)] backdrop-blur-md sm:p-9">
             <div className="mb-7 flex items-start justify-between gap-4">
               <div>
                 <span className="mb-0.5 block text-[10px] font-bold uppercase tracking-widest text-[#3d5245]">Start booking</span>

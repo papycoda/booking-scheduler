@@ -71,6 +71,11 @@ button:disabled {
     box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.72), 0 1px 2px rgba(17, 52, 45, 0.04);
   }
 
+  .auth-form,
+  .auth-form * {
+    pointer-events: auto;
+  }
+
   .auth-input:focus {
     @apply border-[#486e5b]/40 bg-white/55;
     box-shadow: 0 0 0 1px rgba(72, 110, 91, 0.25), inset 0 1px 0 rgba(255, 255, 255, 0.8);
