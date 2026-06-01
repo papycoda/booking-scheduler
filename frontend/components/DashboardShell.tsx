@@ -26,49 +26,60 @@ export function DashboardShell({ title, children }: { title: string; children: R
     setIsAuthorized(true);
   }, []);
 
+  function logout() {
+    clearAccessToken();
+    window.location.href = "/login";
+  }
+
   if (!isAuthorized) {
     return (
       <main className="page-shell">
-        <section className="panel">
+        <section className="dashboard-card p-5">
           <p className="muted">Checking session...</p>
         </section>
       </main>
     );
   }
 
-  function logout() {
-    clearAccessToken();
-    window.location.href = "/login";
-  }
-
   return (
     <main className="page-shell">
-      <header className="grid gap-5 rounded-xl border border-line/80 bg-white/85 p-4 shadow-sm backdrop-blur sm:p-5">
-        <div className="flex flex-wrap items-center justify-between gap-4">
-          <Link href="/dashboard" className="flex items-center gap-3 rounded-lg text-ink transition hover:text-action">
-            <span className="grid h-10 w-10 place-items-center rounded-xl bg-action text-lg font-black text-white shadow-sm">B</span>
-            <span>
-              <span className="block text-lg font-bold leading-none tracking-normal">Bookie</span>
-              <span className="mt-1 block text-xs font-semibold uppercase tracking-[0.16em] text-action">Business dashboard</span>
-            </span>
+      <header className="flex flex-wrap items-center justify-between gap-4 px-1 py-2">
+        <Link href="/dashboard" className="flex items-center gap-3 rounded-xl text-ink transition hover:text-action">
+          <span className="grid h-10 w-10 place-items-center rounded-xl bg-[#0e4731] text-lg font-black text-white shadow-sm">B</span>
+          <span className="grid gap-0.5">
+            <span className="text-xl font-bold leading-none tracking-normal">Bookie</span>
+            <span className="text-[10px] font-bold uppercase tracking-[0.18em] text-action">Business dashboard</span>
+          </span>
+        </Link>
+
+        <div className="flex items-center gap-3">
+          <Link
+            href="/dashboard/settings"
+            className="grid h-10 w-10 place-items-center rounded-full border border-white bg-white text-sm font-bold text-action shadow-sm ring-4 ring-action/5"
+            aria-label="Profile"
+          >
+            P
           </Link>
-
-          <div className="flex items-center gap-2">
-            <Link href="/dashboard/settings" className="secondary-button rounded-lg border px-3 py-2 text-sm font-semibold">
-              Profile
-            </Link>
-            <button type="button" onClick={logout} className="secondary-button rounded-lg border px-3 py-2 text-sm font-semibold">
-              Logout
-            </button>
-          </div>
+          <button
+            type="button"
+            onClick={logout}
+            className="secondary-button inline-flex min-h-0 items-center gap-2 rounded-xl border-0 bg-transparent px-2 py-2 text-sm font-semibold text-ink/75 shadow-none hover:bg-transparent hover:text-action hover:shadow-none"
+          >
+            <span>Logout</span>
+            <svg className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="2.2" viewBox="0 0 24 24" aria-hidden="true">
+              <path strokeLinecap="round" strokeLinejoin="round" d="M5.636 5.636a9 9 0 1012.728 0M12 3v9" />
+            </svg>
+          </button>
         </div>
+      </header>
 
-        <div className="flex flex-wrap items-end justify-between gap-3 border-t border-line/70 pt-4">
+      <section className="dashboard-card overflow-hidden">
+        <div className="flex flex-col gap-4 p-5 sm:flex-row sm:items-center sm:justify-between sm:p-6">
           <div>
             <p className="eyebrow">Current section</p>
-            <h1 className="mt-1 text-3xl font-semibold">{title}</h1>
+            <h1 className="mt-1 text-2xl font-bold tracking-normal text-ink">{title}</h1>
           </div>
-          <nav className="flex flex-wrap gap-2">
+          <nav className="flex gap-1 overflow-x-auto rounded-xl border border-line/60 bg-field/80 p-1">
             {links.map(([label, href]) => {
               const isActive = href === "/dashboard" ? pathname === href : pathname.startsWith(href);
               return (
@@ -77,10 +88,8 @@ export function DashboardShell({ title, children }: { title: string; children: R
                   href={href}
                   aria-current={isActive ? "page" : undefined}
                   className={[
-                    "rounded-lg border px-3 py-2 text-sm font-semibold transition",
-                    isActive
-                      ? "border-action bg-action text-white shadow-sm"
-                      : "secondary-button",
+                    "whitespace-nowrap rounded-lg px-4 py-2 text-xs font-semibold transition",
+                    isActive ? "bg-action text-white shadow-sm" : "text-ink/70 hover:bg-white hover:text-action",
                   ].join(" ")}
                 >
                   {label}
@@ -89,7 +98,8 @@ export function DashboardShell({ title, children }: { title: string; children: R
             })}
           </nav>
         </div>
-      </header>
+      </section>
+
       {children}
     </main>
   );

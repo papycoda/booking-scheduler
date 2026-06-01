@@ -10,8 +10,8 @@ body {
   min-height: 100vh;
   color: #17201b;
   background:
-    radial-gradient(circle at top left, rgba(15, 107, 79, 0.10), transparent 28rem),
-    linear-gradient(180deg, #fbfaf6 0%, #f4f6f2 42%, #eef3f2 100%);
+    radial-gradient(circle at top left, rgba(14, 71, 49, 0.10), transparent 28rem),
+    linear-gradient(135deg, #e1e9e3 0%, #f2f5f3 48%, #f7f9f8 100%);
   font-feature-settings: "cv02", "cv03", "cv04", "cv11";
 }
 
@@ -96,17 +96,22 @@ button:disabled {
   }
 
   .page-shell {
-    @apply mx-auto grid w-full max-w-6xl gap-6 px-4 py-6 sm:px-6 lg:px-8;
+    @apply mx-auto grid w-full max-w-7xl gap-6 px-4 py-4 sm:px-6 sm:py-6 lg:px-8;
+  }
+
+  .dashboard-card {
+    @apply border border-white bg-white shadow-[0_20px_40px_rgba(14,71,49,0.03)];
+    border-radius: 1rem;
   }
 
   .panel {
-    @apply border border-line/90 bg-white/90 p-4 shadow-sm backdrop-blur sm:p-5;
-    border-radius: 0.75rem;
+    @apply border border-white bg-white p-4 shadow-[0_20px_40px_rgba(14,71,49,0.03)] sm:p-5;
+    border-radius: 1rem;
   }
 
   .panel-muted {
-    @apply border border-line/80 bg-field/80 p-4 sm:p-5;
-    border-radius: 0.75rem;
+    @apply border border-line/70 bg-[#fcfdfe] p-4 sm:p-5;
+    border-radius: 0.9rem;
   }
 
   .section-title {
@@ -143,7 +148,7 @@ button:disabled {
   }
 
   .metric {
-    @apply panel grid gap-1;
+    @apply grid gap-1 rounded-2xl border border-line/60 bg-[#fcfdfe] p-4;
   }
 
   .metric strong {
@@ -151,8 +156,8 @@ button:disabled {
   }
 
   .table-shell {
-    @apply overflow-x-auto border border-line bg-white shadow-sm;
-    border-radius: 0.75rem;
+    @apply overflow-x-auto border border-white bg-white shadow-[0_20px_40px_rgba(14,71,49,0.03)];
+    border-radius: 1rem;
   }
 
   .slot-button {
