@@ -59,7 +59,11 @@ export default function AvailabilityPage() {
 
   return (
     <DashboardShell title="Availability">
-      <form onSubmit={addSchedule} className="grid gap-3 border border-line bg-white p-4 sm:grid-cols-5">
+      <form onSubmit={addSchedule} className="panel grid gap-3 sm:grid-cols-5">
+        <div className="sm:col-span-5">
+          <p className="eyebrow">Weekly hours</p>
+          <h2 className="section-title">Add a regular schedule</h2>
+        </div>
         <select name="staff_id">
           <option value="">All staff</option>
           {staff.map((member) => <option key={member.id} value={member.id}>{member.name}</option>)}
@@ -71,7 +75,11 @@ export default function AvailabilityPage() {
         <input name="end_time" type="time" required />
         <button type="submit">Add Schedule</button>
       </form>
-      <form onSubmit={addOverride} className="grid gap-3 border border-line bg-white p-4 sm:grid-cols-6">
+      <form onSubmit={addOverride} className="panel grid gap-3 sm:grid-cols-6">
+        <div className="sm:col-span-6">
+          <p className="eyebrow">Exceptions</p>
+          <h2 className="section-title">Add an override</h2>
+        </div>
         <select name="staff_id">
           <option value="">All staff</option>
           {staff.map((member) => <option key={member.id} value={member.id}>{member.name}</option>)}
@@ -84,11 +92,11 @@ export default function AvailabilityPage() {
         <button type="submit">Add Override</button>
       </form>
       <section className="grid gap-3 md:grid-cols-2">
-        <div className="border border-line bg-white p-4">
+        <div className="panel">
           <h2 className="font-semibold">Weekly</h2>
           {schedules.map((item) => <p key={item.id} className="mt-2 text-sm">{item.day_of_week}: {item.start_time} - {item.end_time}</p>)}
         </div>
-        <div className="border border-line bg-white p-4">
+        <div className="panel">
           <h2 className="font-semibold">Overrides</h2>
           {overrides.map((item) => <p key={item.id} className="mt-2 text-sm">{item.date}: {item.is_unavailable ? "Unavailable" : `${item.start_time} - ${item.end_time}`}</p>)}
         </div>

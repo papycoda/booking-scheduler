@@ -80,53 +80,73 @@ export default function PublicBookingPage({ params }: { params: { slug: string }
   }
 
   return (
-    <main className="mx-auto grid max-w-3xl gap-6 px-5 py-8">
-      <header>
-        <h1 className="text-3xl font-semibold">{tenant?.name ?? "Book Appointment"}</h1>
-        {tenant?.description && <p className="mt-2 text-ink/70">{tenant.description}</p>}
-      </header>
-      <form onSubmit={submit} className="grid gap-5">
-        <select value={serviceId} onChange={(event) => setServiceId(event.target.value)} required>
-          <option value="">Select service</option>
-          {services.map((service) => <option key={service.id} value={service.id}>{service.name}</option>)}
-        </select>
-        {tenant?.allow_staff_selection && (
-          <select value={staffId} onChange={(event) => setStaffId(event.target.value)}>
-            <option value="">Anyone available</option>
-            {staff.map((member) => <option key={member.id} value={member.id}>{member.name}</option>)}
-          </select>
-        )}
-        <input type="date" value={date} onChange={(event) => setDate(event.target.value)} required />
-        {selectedService && (
-          <div className="border border-line bg-white p-4 text-sm">
-            <p>{selectedService.price_label ?? `${selectedService.currency} ${selectedService.price}`}</p>
-            <p className="font-semibold">Deposit due now: {selectedService.currency} {selectedService.deposit_due_now ?? selectedService.price}</p>
-          </div>
-        )}
-        {slotsLoading && <p className="text-sm text-ink/70">Loading times...</p>}
-        {!slotsLoading && serviceId && date && slots.length === 0 && <p className="text-sm text-ink/70">No times available for this date.</p>}
-        <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
-          {slots.map((item) => (
-            <button
-              key={item.start_time}
-              type="button"
-              aria-pressed={slot === item.start_time}
-              onClick={() => setSlot(item.start_time)}
-              className={slot === item.start_time ? "border-action bg-action text-white" : ""}
-            >
-              {new Date(item.start_time).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
-            </button>
-          ))}
+    <main className="mx-auto grid min-h-screen max-w-5xl gap-6 px-4 py-6 sm:px-6 lg:grid-cols-[0.9fr_1.1fr] lg:px-8">
+      <header className="panel-muted self-start lg:sticky lg:top-6">
+        <p className="eyebrow">Book online</p>
+        <h1 className="mt-2 text-4xl font-semibold">{tenant?.name ?? "Book Appointment"}</h1>
+        {tenant?.description && <p className="mt-3 text-ink/70">{tenant.description}</p>}
+        <div className="mt-6 grid gap-3 text-sm text-ink/70">
+          {tenant?.address && <p>{tenant.address}</p>}
+          {tenant?.phone && <p>{tenant.phone}</p>}
+          <p>Choose a service, pick an available time, and confirm with the deposit due now.</p>
         </div>
-        {slot && <p className="text-sm text-action">Selected time: {new Date(slot).toLocaleString()}</p>}
-        <input name="full_name" placeholder="Full name" value={fullName} onChange={(event) => setFullName(event.target.value)} required />
-        <input name="email" type="email" placeholder="Email" value={email} onChange={(event) => setEmail(event.target.value)} required />
-        <input name="phone" placeholder="Phone" value={phone} onChange={(event) => setPhone(event.target.value)} />
-        <input name="whatsapp_number" placeholder="WhatsApp number" value={whatsappNumber} onChange={(event) => setWhatsappNumber(event.target.value)} />
-        <input name="inspo_images" type="file" accept="image/*" multiple onChange={(event) => setInspoImages(event.target.files)} />
-        <textarea name="notes" placeholder="Notes" rows={4} value={notes} onChange={(event) => setNotes(event.target.value)} />
+      </header>
+      <form onSubmit={submit} className="panel grid gap-6">
+        <section className="grid gap-3">
+          <div>
+            <p className="eyebrow">Step 1</p>
+            <h2 className="section-title">Service and time</h2>
+          </div>
+          <select value={serviceId} onChange={(event) => setServiceId(event.target.value)} required>
+            <option value="">Select service</option>
+            {services.map((service) => <option key={service.id} value={service.id}>{service.name}</option>)}
+          </select>
+          {tenant?.allow_staff_selection && (
+            <select value={staffId} onChange={(event) => setStaffId(event.target.value)}>
+              <option value="">Anyone available</option>
+              {staff.map((member) => <option key={member.id} value={member.id}>{member.name}</option>)}
+            </select>
+          )}
+          <input type="date" value={date} onChange={(event) => setDate(event.target.value)} required />
+          {selectedService && (
+            <div className="panel-muted grid gap-1 text-sm">
+              <p>{selectedService.price_label ?? `${selectedService.currency} ${selectedService.price}`}</p>
+              <p className="text-lg font-semibold">Deposit due now: {selectedService.currency} {selectedService.deposit_due_now ?? selectedService.price}</p>
+            </div>
+          )}
+          {slotsLoading && <p className="muted">Loading times...</p>}
+          {!slotsLoading && serviceId && date && slots.length === 0 && <p className="muted">No times available for this date.</p>}
+          <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
+            {slots.map((item) => (
+              <button
+                key={item.start_time}
+                type="button"
+                aria-pressed={slot === item.start_time}
+                onClick={() => setSlot(item.start_time)}
+                className="slot-button"
+              >
+                {new Date(item.start_time).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
+              </button>
+            ))}
+          </div>
+          {slot && <p className="tag w-fit">Selected: {new Date(slot).toLocaleString()}</p>}
+        </section>
+        <section className="grid gap-3 border-t border-line pt-5">
+          <div>
+            <p className="eyebrow">Step 2</p>
+            <h2 className="section-title">Your details</h2>
+          </div>
+          <div className="grid gap-3 sm:grid-cols-2">
+            <input name="full_name" placeholder="Full name" value={fullName} onChange={(event) => setFullName(event.target.value)} required />
+            <input name="email" type="email" placeholder="Email" value={email} onChange={(event) => setEmail(event.target.value)} required />
+            <input name="phone" placeholder="Phone" value={phone} onChange={(event) => setPhone(event.target.value)} />
+            <input name="whatsapp_number" placeholder="WhatsApp number" value={whatsappNumber} onChange={(event) => setWhatsappNumber(event.target.value)} />
+          </div>
+          <input name="inspo_images" type="file" accept="image/*" multiple onChange={(event) => setInspoImages(event.target.files)} />
+          <textarea name="notes" placeholder="Notes or style details" rows={4} value={notes} onChange={(event) => setNotes(event.target.value)} />
+        </section>
         {error && <p className="text-sm text-red-700">{error}</p>}
-        <button type="submit" disabled={!canSubmit}>{submitLoading ? "Preparing payment..." : "Continue to Payment"}</button>
+        <button type="submit" disabled={!canSubmit}>{submitLoading ? "Preparing payment..." : "Continue to payment"}</button>
       </form>
     </main>
   );

@@ -43,17 +43,21 @@ export default function StaffPage() {
 
   return (
     <DashboardShell title="Staff">
-      <form onSubmit={submit} className="grid gap-3 border border-line bg-white p-4 sm:grid-cols-3">
+      <form onSubmit={submit} className="panel grid gap-3 sm:grid-cols-3">
+        <div className="sm:col-span-3">
+          <p className="eyebrow">Team</p>
+          <h2 className="section-title">Add staff</h2>
+        </div>
         <input name="name" placeholder="Staff name" required />
         <input name="bio" placeholder="Bio" />
         <button type="submit">Add Staff</button>
       </form>
       <section className="grid gap-3">
         {staff.map((member) => (
-          <div key={member.id} className="grid gap-3 border border-line bg-white p-4">
+          <div key={member.id} className="panel grid gap-3">
             <div className="flex items-center justify-between">
               <strong>{member.name}</strong>
-              <button type="button" onClick={async () => { await api.deleteStaff(member.id); await load(); }}>Deactivate</button>
+              <button className="secondary-button" type="button" onClick={async () => { await api.deleteStaff(member.id); await load(); }}>Deactivate</button>
             </div>
             <form onSubmit={async (event) => { event.preventDefault(); await assignServices(member.id, event.currentTarget); }} className="flex flex-wrap gap-3">
               {services.map((service) => (

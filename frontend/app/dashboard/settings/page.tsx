@@ -45,7 +45,11 @@ export default function SettingsPage() {
 
   return (
     <DashboardShell title="Settings">
-      <form onSubmit={saveSettings} className="grid gap-3 border border-line bg-white p-4 sm:grid-cols-2">
+      <form onSubmit={saveSettings} className="panel grid gap-3 sm:grid-cols-2">
+        <div className="sm:col-span-2">
+          <p className="eyebrow">Business profile</p>
+          <h2 className="section-title">Booking rules and display details</h2>
+        </div>
         <input name="name" placeholder="Business name" defaultValue={tenant?.name ?? ""} required />
         <input name="timezone" placeholder="Timezone" defaultValue={tenant?.timezone ?? "Africa/Lagos"} required />
         <input name="phone" placeholder="Phone" defaultValue={tenant?.phone ?? ""} />
@@ -58,7 +62,11 @@ export default function SettingsPage() {
         <textarea name="description" placeholder="Description" defaultValue={tenant?.description ?? ""} />
         <button type="submit">Save Settings</button>
       </form>
-      <form onSubmit={onboardPaystack} className="grid gap-3 border border-line bg-white p-4 sm:grid-cols-4">
+      <form onSubmit={onboardPaystack} className="panel grid gap-3 sm:grid-cols-4">
+        <div className="sm:col-span-4">
+          <p className="eyebrow">Payments</p>
+          <h2 className="section-title">Connect Paystack settlement</h2>
+        </div>
         <input name="business_name" placeholder="Paystack business name" defaultValue={tenant?.name ?? ""} required />
         <input name="settlement_bank" placeholder="Bank code" required />
         <input name="account_number" placeholder="Account number" required />

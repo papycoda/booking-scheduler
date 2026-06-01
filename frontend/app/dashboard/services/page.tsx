@@ -39,7 +39,11 @@ export default function ServicesPage() {
 
   return (
     <DashboardShell title="Services">
-      <form onSubmit={submit} className="grid gap-3 border border-line bg-white p-4 sm:grid-cols-4">
+      <form onSubmit={submit} className="panel grid gap-3 sm:grid-cols-4">
+        <div className="sm:col-span-4">
+          <p className="eyebrow">Service catalog</p>
+          <h2 className="section-title">Add a bookable service</h2>
+        </div>
         <input name="name" placeholder="Service name" required />
         <input name="duration_minutes" type="number" min={5} max={480} placeholder="Duration" required />
         <input name="price" type="number" min={0} placeholder="Base/from price in kobo" required />
@@ -59,7 +63,7 @@ export default function ServicesPage() {
       </form>
       <section className="grid gap-3">
         {services.map((service) => (
-          <div key={service.id} className="flex items-center justify-between border border-line bg-white p-4">
+          <div key={service.id} className="panel flex items-center justify-between gap-4">
             <div>
               <strong>{service.name}</strong>
               <p className="text-sm text-ink/70">
@@ -69,7 +73,7 @@ export default function ServicesPage() {
                 Deposit: {service.deposit_policy === "custom" ? `${service.currency} ${service.deposit_amount ?? 0}` : service.deposit_policy === "tenant_default" ? "Business default" : "Full fixed price"}
               </p>
             </div>
-            <button type="button" onClick={async () => { await api.deleteService(service.id); await load(); }}>Deactivate</button>
+            <button className="secondary-button" type="button" onClick={async () => { await api.deleteService(service.id); await load(); }}>Deactivate</button>
           </div>
         ))}
       </section>

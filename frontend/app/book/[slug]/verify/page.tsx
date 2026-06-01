@@ -29,7 +29,11 @@ export default function VerifyPage({ params, searchParams }: { params: { slug: s
 
   return (
     <main className="mx-auto flex min-h-screen max-w-md items-center px-5">
-      <h1 className="text-3xl font-semibold">{message}</h1>
+      <section className="panel grid w-full gap-3 text-center">
+        <p className="eyebrow mx-auto">Payment status</p>
+        <h1 className="text-3xl font-semibold">{message}</h1>
+        <p className="muted">This page updates automatically after Paystack confirms the transaction.</p>
+      </section>
     </main>
   );
 }

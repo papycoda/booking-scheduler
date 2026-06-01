@@ -21,8 +21,11 @@ export default function ForgotPasswordPage() {
 
   return (
     <main className="mx-auto flex min-h-screen max-w-md items-center px-5">
-      <form onSubmit={submit} className="grid w-full gap-4">
-        <h1 className="text-3xl font-semibold">Forgot Password</h1>
+      <form onSubmit={submit} className="panel grid w-full gap-4">
+        <div>
+          <p className="eyebrow">Account access</p>
+          <h1 className="mt-1 text-3xl font-semibold">Forgot password</h1>
+        </div>
         <input name="email" type="email" placeholder="Email" required />
         {message && <p className="text-sm text-action">{message}</p>}
         {error && <p className="text-sm text-red-700">{error}</p>}

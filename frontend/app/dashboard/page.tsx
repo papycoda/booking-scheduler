@@ -32,12 +32,12 @@ export default function DashboardPage() {
     <DashboardShell title="Bookings">
       {analytics && (
         <section className="grid gap-3 sm:grid-cols-3">
-          <div className="border border-line bg-white p-4"><strong>{analytics.bookings_count}</strong><span className="block text-sm">Bookings</span></div>
-          <div className="border border-line bg-white p-4"><strong>NGN {analytics.revenue}</strong><span className="block text-sm">Revenue</span></div>
-          <div className="border border-line bg-white p-4"><strong>{analytics.top_services[0]?.name ?? "None"}</strong><span className="block text-sm">Top service</span></div>
+          <div className="metric"><strong>{analytics.bookings_count}</strong><span className="muted">Bookings</span></div>
+          <div className="metric"><strong>NGN {analytics.revenue}</strong><span className="muted">Revenue</span></div>
+          <div className="metric"><strong>{analytics.top_services[0]?.name ?? "None"}</strong><span className="muted">Top service</span></div>
         </section>
       )}
-      <section className="overflow-x-auto border border-line bg-white">
+      <section className="table-shell">
         <table className="w-full min-w-[720px] text-left text-sm">
           <thead className="bg-field">
             <tr>
@@ -74,9 +74,9 @@ export default function DashboardPage() {
                   </div>
                 </td>
                 <td className="flex gap-2 p-3">
-                  <button type="button" onClick={() => updateStatus(booking.id, "completed")}>Done</button>
-                  <button type="button" onClick={() => updateStatus(booking.id, "cancelled")}>Cancel</button>
-                  <button type="button" onClick={() => updateStatus(booking.id, "no_show")}>No Show</button>
+                  <button className="secondary-button" type="button" onClick={() => updateStatus(booking.id, "completed")}>Done</button>
+                  <button className="danger-button" type="button" onClick={() => updateStatus(booking.id, "cancelled")}>Cancel</button>
+                  <button className="secondary-button" type="button" onClick={() => updateStatus(booking.id, "no_show")}>No Show</button>
                 </td>
               </tr>
             ))}
