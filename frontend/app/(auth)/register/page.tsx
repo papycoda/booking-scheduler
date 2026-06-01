@@ -1,12 +1,16 @@
 "use client";
 
-import { FormEvent, useState } from "react";
-import { api, storeAccessToken } from "../../../lib/api";
+import { FormEvent, useEffect, useState } from "react";
+import { api, getAccessToken, storeAccessToken } from "../../../lib/api";
 import { AuthShell } from "../../../components/AuthShell";
 
 export default function RegisterPage() {
   const [error, setError] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
+
+  useEffect(() => {
+    if (getAccessToken()) window.location.replace("/dashboard");
+  }, []);
 
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();

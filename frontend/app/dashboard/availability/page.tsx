@@ -78,7 +78,7 @@ export default function AvailabilityPage() {
       <form onSubmit={addOverride} className="panel grid gap-3 sm:grid-cols-6">
         <div className="sm:col-span-6">
           <p className="eyebrow">Exceptions</p>
-          <h2 className="section-title">Add an override</h2>
+          <h2 className="section-title">Add an exception</h2>
         </div>
         <select name="staff_id">
           <option value="">All staff</option>
@@ -89,7 +89,7 @@ export default function AvailabilityPage() {
         <input name="end_time" type="time" />
         <label className="flex items-center gap-2 text-sm"><input className="w-auto" name="is_unavailable" type="checkbox" />Unavailable</label>
         <input name="reason" placeholder="Reason" />
-        <button type="submit">Add Override</button>
+        <button type="submit">Add Exception</button>
       </form>
       <section className="grid gap-3 md:grid-cols-2">
         <div className="panel">
@@ -97,7 +97,7 @@ export default function AvailabilityPage() {
           {schedules.map((item) => <p key={item.id} className="mt-2 text-sm">{item.day_of_week}: {item.start_time} - {item.end_time}</p>)}
         </div>
         <div className="panel">
-          <h2 className="font-semibold">Overrides</h2>
+          <h2 className="font-semibold">Exceptions</h2>
           {overrides.map((item) => <p key={item.id} className="mt-2 text-sm">{item.date}: {item.is_unavailable ? "Unavailable" : `${item.start_time} - ${item.end_time}`}</p>)}
         </div>
       </section>

@@ -1,13 +1,17 @@
 "use client";
 
-import { FormEvent, useState } from "react";
+import { FormEvent, useEffect, useState } from "react";
 import Link from "next/link";
-import { api, storeAccessToken } from "../../../lib/api";
+import { api, getAccessToken, storeAccessToken } from "../../../lib/api";
 import { AuthShell } from "../../../components/AuthShell";
 
 export default function LoginPage() {
   const [error, setError] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
+
+  useEffect(() => {
+    if (getAccessToken()) window.location.replace("/dashboard");
+  }, []);
 
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();

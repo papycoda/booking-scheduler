@@ -205,6 +205,11 @@ export function storeAccessToken(accessToken: string) {
   document.cookie = "dashboard_session=1; path=/; max-age=604800; samesite=lax";
 }
 
+export function clearAccessToken() {
+  localStorage.removeItem("access_token");
+  document.cookie = "dashboard_session=; path=/; max-age=0; samesite=lax";
+}
+
 export function apiAssetUrl(url: string) {
   if (/^https?:\/\//.test(url)) return url;
   return `${API_BASE_URL.replace(/\/$/, "")}${url.startsWith("/") ? url : `/${url}`}`;
