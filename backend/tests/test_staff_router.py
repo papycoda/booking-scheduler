@@ -10,14 +10,15 @@ os.environ.setdefault("DATABASE_URL", "postgresql+asyncpg://user:pass@localhost/
 os.environ.setdefault("REDIS_URL", "redis://localhost:6379")
 os.environ.setdefault("PAYSTACK_SECRET_KEY", "sk_test_x")
 
-from app.routers.staff import assign_staff_services, delete_staff, read_staff  # noqa: E402
+from app.routers.staff import assign_staff_services, delete_staff, list_staff, read_staff  # noqa: E402
 from app.schemas.staff import StaffServiceAssignmentRequest  # noqa: E402
 
 
 class FakeResult:
-    def __init__(self, scalar=None, scalars=None):
+    def __init__(self, scalar=None, scalars=None, rows=None):
         self.scalar = scalar
         self._scalars = scalars or []
+        self.rows = rows or []
 
     def scalar_one_or_none(self):
         return self.scalar
@@ -26,7 +27,7 @@ class FakeResult:
         return self
 
     def all(self):
-        return self._scalars
+        return self.rows or self._scalars
 
 
 class FakeSession:
@@ -44,6 +45,24 @@ class FakeSession:
 
 
 class StaffRouterTests(unittest.IsolatedAsyncioTestCase):
+    async def test_list_staff_includes_assigned_service_ids(self):
+        staff_a = SimpleNamespace(id=uuid4(), name="Kemi Rhodes", bio=None, avatar_url=None, is_bookable=True, is_active=True)
+        staff_b = SimpleNamespace(id=uuid4(), name="Nora James", bio=None, avatar_url=None, is_bookable=True, is_active=True)
+        service_a = uuid4()
+        service_b = uuid4()
+        db = FakeSession(
+            [
+                FakeResult(scalars=[staff_a, staff_b]),
+                FakeResult(rows=[(staff_a.id, service_a), (staff_a.id, service_b), (staff_b.id, service_b)]),
+            ]
+        )
+
+        response = await list_staff(SimpleNamespace(tenant_id=uuid4()), db)
+
+        by_name = {staff.name: staff.service_ids for staff in response}
+        self.assertEqual(by_name["Kemi Rhodes"], [service_a, service_b])
+        self.assertEqual(by_name["Nora James"], [service_b])
+
     async def test_read_staff_returns_404_when_not_in_current_tenant(self):
         with self.assertRaises(Exception) as raised:
             await read_staff(uuid4(), SimpleNamespace(tenant_id=uuid4()), FakeSession([FakeResult(scalar=None)]))

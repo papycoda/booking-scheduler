@@ -74,6 +74,25 @@ class PublicRouterTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(getattr(raised.exception, "status_code", None), 404)
         self.assertEqual(raised.exception.detail["error"], "SERVICE_NOT_FOUND")
 
+    async def test_public_staff_filters_to_staff_assigned_to_requested_service(self):
+        tenant = SimpleNamespace(id=uuid4())
+        service_id = uuid4()
+        assigned_staff = [SimpleNamespace(id=uuid4(), name="Kemi Rhodes"), SimpleNamespace(id=uuid4(), name="Nora James")]
+
+        async def get_public_tenant(_db, _slug):
+            return tenant
+
+        public_router.get_public_tenant = get_public_tenant
+
+        response = await public_router.public_staff.__wrapped__(
+            SimpleNamespace(),
+            "tenant-slug",
+            FakeSession([FakeResult(scalar=service_id), FakeResult(rows=assigned_staff)]),
+            service_id=service_id,
+        )
+
+        self.assertEqual([staff.name for staff in response], ["Kemi Rhodes", "Nora James"])
+
     async def test_get_public_tenant_sets_tenant_context_after_slug_lookup(self):
         tenant = SimpleNamespace(id=uuid4(), slug="tenant-slug", status="active")
         db = FakeTenantLookupSession(tenant)

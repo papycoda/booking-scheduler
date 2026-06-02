@@ -228,4 +228,10 @@ button:disabled {
   .slot-button[aria-pressed="true"] {
     @apply border-action bg-action text-white shadow-[0_10px_22px_rgba(14,71,49,0.18)];
   }
+
+  .availability-stripes {
+    background-image: linear-gradient(135deg, #e2e8f0 25%, transparent 25%, transparent 50%, #e2e8f0 50%, #e2e8f0 75%, transparent 75%, transparent);
+    background-size: 16px 16px;
+    background-color: rgba(248, 250, 249, 0.8);
+  }
 }

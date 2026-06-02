@@ -48,6 +48,12 @@ export function DashboardShell({ children }: { title: string; children: React.Re
 
         <div className="flex items-center gap-3">
           <Link
+            href="/onboarding"
+            className="hidden rounded-xl border border-line bg-white px-3 py-2 text-sm font-semibold text-ink/75 shadow-sm transition hover:text-action sm:inline-flex"
+          >
+            Setup guide
+          </Link>
+          <Link
             href="/dashboard/settings"
             className="grid h-10 w-10 place-items-center rounded-full border border-white bg-white text-sm font-bold text-action shadow-sm ring-4 ring-action/5"
             aria-label="Profile"

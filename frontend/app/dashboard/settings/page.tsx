@@ -9,8 +9,16 @@ export default function SettingsPage() {
   const [paymentStatus, setPaymentStatus] = useState<PaymentSetupStatus | null>(null);
   const [slugDraft, setSlugDraft] = useState("");
   const [publicOrigin, setPublicOrigin] = useState("");
+  const [activeSection, setActiveSection] = useState("booking-link");
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
+
+  const sectionLinks = [
+    ["Booking link", "booking-link"],
+    ["Business profile", "business-profile"],
+    ["Payments", "payments"],
+    ["Payout account", "payout-account"],
+  ];
 
   useEffect(() => {
     setPublicOrigin(window.location.origin);
@@ -21,6 +29,33 @@ export default function SettingsPage() {
         setPaymentStatus(status);
       })
       .catch((err) => setError(err.message));
+  }, []);
+
+  useEffect(() => {
+    function syncActiveSection() {
+      const scrollPosition = window.scrollY + 180;
+      let currentSection = sectionLinks[0][1];
+
+      for (const [, id] of sectionLinks) {
+        const section = document.getElementById(id);
+        if (!section) continue;
+
+        if (section.offsetTop <= scrollPosition) {
+          currentSection = id;
+        }
+      }
+
+      setActiveSection(currentSection);
+    }
+
+    syncActiveSection();
+    window.addEventListener("scroll", syncActiveSection, { passive: true });
+    window.addEventListener("resize", syncActiveSection);
+
+    return () => {
+      window.removeEventListener("scroll", syncActiveSection);
+      window.removeEventListener("resize", syncActiveSection);
+    };
   }, []);
 
   function slugify(value: string) {
@@ -108,10 +143,10 @@ export default function SettingsPage() {
   const publicBookingUrl = `${publicOrigin}/book/${slugDraft || tenant?.slug || ""}`;
   const payoutStatusCopy =
     setupStatus === "split_ready"
-      ? "Direct split ready. Future checkout payments can route business funds directly."
+      ? "Automatic routing is ready. Future checkout payments can separate Bookie fees from business payouts at checkout."
       : setupStatus === "bank_added"
-        ? "Payout details saved. Platform-collected booking payments can be settled to this account."
-        : "Payout setup pending. Clients can still pay deposits now; business payouts wait until bank details are added.";
+        ? "Payout details are saved. Deposits collected through Bookie can be settled to this account."
+        : "Clients can pay deposits now. Add a payout account so the business can receive settled funds.";
 
   return (
     <DashboardShell title="Settings">
@@ -119,14 +154,16 @@ export default function SettingsPage() {
         <aside className="dashboard-card hidden h-fit p-4 lg:sticky lg:top-6 lg:block">
           <p className="eyebrow">Settings</p>
           <nav className="mt-4 grid gap-1">
-            {[
-              ["Booking link", "#booking-link"],
-              ["Business profile", "#business-profile"],
-              ["Payments", "#payments"],
-              ["Payout account", "#payout-account"],
-              ["Direct split", "#direct-split"],
-            ].map(([label, href]) => (
-              <a key={href} href={href} className="rounded-xl px-3 py-2 text-sm font-semibold text-ink/65 transition hover:bg-field hover:text-action">
+            {sectionLinks.map(([label, id]) => (
+              <a
+                key={id}
+                href={`#${id}`}
+                aria-current={activeSection === id ? "true" : undefined}
+                onClick={() => setActiveSection(id)}
+                className={`rounded-xl px-3 py-2 text-sm font-semibold transition ${
+                  activeSection === id ? "bg-field text-action shadow-inner" : "text-ink/65 hover:bg-field hover:text-action"
+                }`}
+              >
                 {label}
               </a>
             ))}
@@ -134,12 +171,12 @@ export default function SettingsPage() {
         </aside>
 
         <div className="grid gap-6">
-      <form id="business-profile" onSubmit={saveSettings} className="dashboard-card grid gap-5 p-5 sm:grid-cols-2">
+      <form onSubmit={saveSettings} className="dashboard-card grid gap-5 p-5 sm:grid-cols-2">
         <div className="sm:col-span-2">
           <p className="eyebrow">Business profile</p>
           <h2 className="section-title">Booking rules and display details</h2>
         </div>
-        <section id="booking-link" className="grid gap-3 rounded-2xl border border-line/70 bg-[#fcfdfe] p-4 sm:col-span-2">
+        <section id="booking-link" className="scroll-mt-6 grid gap-3 rounded-2xl border border-line/70 bg-[#fcfdfe] p-4 sm:col-span-2">
           <div>
             <p className="eyebrow">Public booking link</p>
             <h3 className="font-semibold text-ink">Custom URL</h3>
@@ -181,8 +218,12 @@ export default function SettingsPage() {
           <a className="text-sm font-semibold text-action underline-offset-4 hover:underline" href={publicBookingUrl} target="_blank" rel="noreferrer">
             {publicBookingUrl}
           </a>
-          <p className="muted">This is the link clients use to book without creating an account.</p>
+          <p className="muted">Share this link anywhere clients should be able to choose a time and pay their deposit.</p>
         </section>
+        <div id="business-profile" className="scroll-mt-6 sm:col-span-2">
+          <p className="eyebrow">Business profile</p>
+          <h3 className="font-semibold text-ink">Rules and client-facing details</h3>
+        </div>
         <label className="grid gap-2 text-sm font-semibold text-ink/75">
           Business name
           <input name="name" placeholder="Le'Test" defaultValue={tenant?.name ?? ""} required />
@@ -229,31 +270,31 @@ export default function SettingsPage() {
         </label>
         <button type="submit">Save Settings</button>
       </form>
-      <section id="payments" className="dashboard-card grid gap-4 p-5">
+      <section id="payments" className="dashboard-card scroll-mt-6 grid gap-4 p-5">
         <div>
           <p className="eyebrow">Payments</p>
-          <h2 className="section-title">Collection and payout status</h2>
+          <h2 className="section-title">Deposit collection</h2>
         </div>
-        <div className="grid gap-3 sm:grid-cols-3">
-          <div className="metric">
-            <strong>Active</strong>
-            <span className="muted">Payments can be collected now</span>
+        <div className="grid gap-3 sm:grid-cols-2">
+          <div className="rounded-2xl border border-action/15 bg-action/5 p-4">
+            <span className="status-badge status-badge-success">Active</span>
+            <h3 className="mt-3 text-lg font-semibold text-ink">Clients can pay deposits</h3>
+            <p className="muted mt-1">Bookings can be paid for immediately through the public booking link.</p>
           </div>
-          <div className="metric">
-            <strong>{setupStatus.replace("_", " ")}</strong>
-            <span className="muted">Payout setup</span>
-          </div>
-          <div className="metric">
-            <strong>{paymentStatus?.payout_ready ? "Ready" : "Pending"}</strong>
-            <span className="muted">Business payouts</span>
+          <div className="rounded-2xl border border-line/80 bg-white p-4">
+            <span className="status-badge">{paymentStatus?.payout_ready ? "Payout ready" : "Payout needed"}</span>
+            <h3 className="mt-3 text-lg font-semibold text-ink">
+              {paymentStatus?.payout_ready ? "Business payouts are set" : "Add where payouts should go"}
+            </h3>
+            <p className="muted mt-1">{payoutStatusCopy}</p>
           </div>
         </div>
-        <p className="muted">{payoutStatusCopy}</p>
       </section>
-      <form id="payout-account" onSubmit={savePayoutSetup} className="finance-card grid gap-4 sm:grid-cols-4">
+      <form id="payout-account" onSubmit={savePayoutSetup} className="finance-card scroll-mt-6 grid gap-4 sm:grid-cols-4">
         <div className="sm:col-span-4">
           <p className="eyebrow">Payout account</p>
-          <h2 className="section-title">Add bank details without Paystack setup</h2>
+          <h2 className="section-title">Where should business payouts go?</h2>
+          <p className="muted mt-1">This is the normal setup path. Clients can still pay before this is completed.</p>
         </div>
         <label className="grid gap-2 text-sm font-semibold text-ink/75">
           Account name
@@ -269,25 +310,28 @@ export default function SettingsPage() {
         </label>
         <button type="submit">Save payout account</button>
       </form>
-      <form id="direct-split" onSubmit={onboardPaystack} className="finance-card grid gap-4 sm:grid-cols-4">
-        <div className="sm:col-span-4">
-          <p className="eyebrow">Payments</p>
-          <h2 className="section-title">Optional direct split settlement</h2>
-        </div>
-        <label className="grid gap-2 text-sm font-semibold text-ink/75">
-          Paystack business name
-          <input name="business_name" placeholder="Registered business name" defaultValue={tenant?.name ?? ""} required />
-        </label>
-        <label className="grid gap-2 text-sm font-semibold text-ink/75">
-          Bank code
-          <input name="settlement_bank" placeholder="Example: 058" required />
-        </label>
-        <label className="grid gap-2 text-sm font-semibold text-ink/75">
-          Account number
-          <input name="account_number" placeholder="10-digit account number" required />
-        </label>
-        <button type="submit">Connect Paystack</button>
-      </form>
+      <details id="direct-split" className="finance-card scroll-mt-6">
+        <summary className="cursor-pointer list-none">
+          <p className="eyebrow">Advanced payments</p>
+          <h2 className="section-title">Use direct checkout split</h2>
+          <p className="muted mt-1">Optional. Turn this on later if you want checkout payments routed through a Paystack subaccount instead of Bookie settling payouts after collection.</p>
+        </summary>
+        <form onSubmit={onboardPaystack} className="mt-5 grid gap-4 sm:grid-cols-4">
+          <label className="grid gap-2 text-sm font-semibold text-ink/75">
+            Business name
+            <input name="business_name" placeholder="Registered business name" defaultValue={tenant?.name ?? ""} required />
+          </label>
+          <label className="grid gap-2 text-sm font-semibold text-ink/75">
+            Bank code
+            <input name="settlement_bank" placeholder="Example: 058" required />
+          </label>
+          <label className="grid gap-2 text-sm font-semibold text-ink/75">
+            Account number
+            <input name="account_number" placeholder="10-digit account number" required />
+          </label>
+          <button type="submit">Enable direct split</button>
+        </form>
+      </details>
       {message && <p className="text-sm text-action">{message}</p>}
       {error && <p className="text-sm text-red-700">{error}</p>}
         </div>

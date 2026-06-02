@@ -4,16 +4,38 @@ import { FormEvent, useEffect, useState } from "react";
 import { api, Service, Staff } from "../../../lib/api";
 import { DashboardShell } from "../../../components/DashboardShell";
 
+function initials(name: string) {
+  return name
+    .split(" ")
+    .map((part) => part[0])
+    .join("")
+    .slice(0, 2)
+    .toUpperCase();
+}
+
+function shortBio(bio?: string | null) {
+  if (!bio) return "Team member";
+  return bio.length > 44 ? `${bio.slice(0, 44)}...` : bio;
+}
+
 export default function StaffPage() {
   const [staff, setStaff] = useState<Staff[]>([]);
   const [services, setServices] = useState<Service[]>([]);
+  const [selectedStaffId, setSelectedStaffId] = useState("");
+  const [serviceDrafts, setServiceDrafts] = useState<Record<string, string[]>>({});
   const [error, setError] = useState("");
+  const [message, setMessage] = useState("");
 
-  async function load() {
+  async function load(preferredStaffId?: string) {
     try {
       const [staffRows, serviceRows] = await Promise.all([api.dashboardStaff(), api.dashboardServices()]);
       setStaff(staffRows);
       setServices(serviceRows);
+      setServiceDrafts(Object.fromEntries(staffRows.map((member) => [member.id, member.service_ids ?? []])));
+      const nextSelected = preferredStaffId && staffRows.some((member) => member.id === preferredStaffId)
+        ? preferredStaffId
+        : staffRows[0]?.id ?? "";
+      setSelectedStaffId(nextSelected);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Could not load staff");
     }
@@ -23,84 +45,184 @@ export default function StaffPage() {
     load();
   }, []);
 
+  const selectedStaff = staff.find((member) => member.id === selectedStaffId) ?? staff[0];
+  const selectedServices = selectedStaff ? serviceDrafts[selectedStaff.id] ?? [] : [];
+
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    setError("");
+    setMessage("");
     const form = new FormData(event.currentTarget);
-    await api.createStaff({
+    const created = await api.createStaff({
       name: form.get("name"),
       bio: form.get("bio") || null,
       avatar_url: null,
       is_bookable: true,
     });
     event.currentTarget.reset();
-    await load();
+    setMessage("Staff added");
+    await load(created.id);
   }
 
   async function toggleBookable(member: Staff) {
+    setError("");
+    setMessage("");
     await api.updateStaff(member.id, { is_bookable: !member.is_bookable });
-    await load();
+    setMessage(member.is_bookable ? "Bookings turned off" : "Bookings turned on");
+    await load(member.id);
   }
 
-  async function assignServices(staffId: string, form: HTMLFormElement) {
-    const data = new FormData(form);
-    await api.assignStaffServices(staffId, data.getAll("service_ids").map(String));
+  function toggleService(staffId: string, serviceId: string) {
+    setServiceDrafts((current) => {
+      const selected = current[staffId] ?? [];
+      const next = selected.includes(serviceId) ? selected.filter((id) => id !== serviceId) : [...selected, serviceId];
+      return { ...current, [staffId]: next };
+    });
+  }
+
+  async function assignServices(staffId: string) {
+    setError("");
+    setMessage("");
+    await api.assignStaffServices(staffId, serviceDrafts[staffId] ?? []);
+    setMessage("Services saved");
+    await load(staffId);
+  }
+
+  async function deactivateStaff(staffId: string) {
+    setError("");
+    setMessage("");
+    await api.deleteStaff(staffId);
+    setMessage("Staff removed from bookings");
+    await load();
   }
 
   return (
     <DashboardShell title="Staff">
-      <section className="grid gap-6 lg:grid-cols-[360px_1fr]">
-        <form onSubmit={submit} className="dashboard-card grid gap-4 p-5 lg:self-start">
-          <div>
-            <p className="eyebrow">Team</p>
-            <h2 className="section-title">Add staff</h2>
-          </div>
-          <input name="name" placeholder="Staff name" required />
-          <textarea name="bio" placeholder="Bio or specialty" />
-          <button type="submit">Add staff</button>
-        </form>
+      <section className="dashboard-card overflow-hidden">
+        <div className="border-b border-line/70 bg-[#fcfdfe] p-6">
+          <p className="eyebrow">Team</p>
+          <h2 className="section-title mt-1">Staff and services</h2>
+          <p className="muted mt-1">Choose a staff member, then pick the services they can take.</p>
+        </div>
 
-        <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
-          {staff.map((member) => (
-            <article key={member.id} className="dashboard-card grid gap-4 p-5">
-              <div className="grid justify-items-center gap-3 text-center">
-                <div className="grid h-20 w-20 place-items-center rounded-full bg-gradient-to-br from-[#dce8df] to-white text-2xl font-black text-action ring-8 ring-action/5">
-                  {member.name.slice(0, 1).toUpperCase()}
-                </div>
-                <div>
-                  <h2 className="font-bold text-ink">{member.name}</h2>
-                  {member.bio && <p className="mt-1 text-xs font-medium text-ink/60">{member.bio}</p>}
-                </div>
-                <button
-                  className={member.is_bookable ? "status-badge status-badge-success" : "status-badge status-badge-muted"}
-                  type="button"
-                  onClick={() => toggleBookable(member)}
-                >
-                  {member.is_bookable ? "Bookable" : "Off-Duty"}
-                </button>
+        <div className="grid min-h-[640px] divide-y divide-line/70 lg:grid-cols-12 lg:divide-x lg:divide-y-0">
+          <aside className="grid gap-6 bg-[#fcfdfe]/60 p-5 lg:col-span-5">
+            <form onSubmit={submit} className="grid gap-3 rounded-2xl border border-line/70 bg-white p-4 shadow-sm">
+              <div>
+                <p className="text-xs font-bold uppercase tracking-wider text-ink/55">Add staff</p>
               </div>
+              <input name="name" placeholder="Staff name" required />
+              <textarea name="bio" placeholder="Bio or specialty" rows={3} />
+              <button type="submit">Add staff</button>
+            </form>
 
-              <form onSubmit={async (event) => { event.preventDefault(); await assignServices(member.id, event.currentTarget); }} className="grid gap-3 border-t border-line/60 pt-4">
-                <p className="text-xs font-bold uppercase tracking-wider text-ink/55">Service assignment</p>
-                <div className="flex flex-wrap gap-2">
-                  {services.map((service) => (
-                    <label key={service.id} className="tag-button has-[:checked]:border-action has-[:checked]:bg-action has-[:checked]:text-white">
-                      <input className="sr-only" type="checkbox" name="service_ids" value={service.id} />
-                      {service.name}
-                    </label>
-                  ))}
+            <div className="grid content-start gap-3">
+              <p className="text-xs font-bold uppercase tracking-wider text-ink/55">Team list</p>
+              <div className="grid gap-2">
+                {staff.map((member) => {
+                  const isSelected = member.id === selectedStaff?.id;
+                  return (
+                    <button
+                      key={member.id}
+                      type="button"
+                      onClick={() => setSelectedStaffId(member.id)}
+                      className={[
+                        "flex min-h-0 items-center justify-between rounded-xl border p-3 text-left text-ink shadow-none transition hover:translate-y-0",
+                        isSelected ? "border-action/20 bg-[#e8efe9]/80" : "border-line/70 bg-white hover:bg-[#f8faf9]",
+                      ].join(" ")}
+                    >
+                      <span className="flex min-w-0 items-center gap-3">
+                        <span className={["grid h-10 w-10 shrink-0 place-items-center rounded-full text-xs font-bold", isSelected ? "bg-action text-white" : "border border-[#caa26b]/20 bg-[#caa26b]/10 text-[#9a7546]"].join(" ")}>
+                          {initials(member.name)}
+                        </span>
+                        <span className="min-w-0">
+                          <span className="block truncate text-sm font-bold">{member.name}</span>
+                          <span className="block truncate text-xs font-medium text-ink/55">{shortBio(member.bio)}</span>
+                        </span>
+                      </span>
+                      <span className="rounded-md bg-white px-2 py-1 text-[10px] font-bold uppercase tracking-wider text-ink/55">
+                        {member.is_bookable ? "On" : "Off"}
+                      </span>
+                    </button>
+                  );
+                })}
+                {staff.length === 0 && <p className="rounded-xl border border-line/70 bg-white p-4 text-sm text-ink/65">No staff yet.</p>}
+              </div>
+            </div>
+          </aside>
+
+          <section className="flex flex-col justify-between bg-white p-6 lg:col-span-7">
+            {selectedStaff ? (
+              <>
+                <div className="grid gap-6">
+                  <div className="flex flex-col justify-between gap-4 border-b border-line/70 pb-5 sm:flex-row sm:items-start">
+                    <div className="flex items-start gap-4">
+                      <div className="grid h-16 w-16 shrink-0 place-items-center rounded-full border border-action/10 bg-[#e8efe9] text-lg font-bold text-action shadow-inner">
+                        {initials(selectedStaff.name)}
+                      </div>
+                      <div>
+                        <h2 className="text-xl font-bold text-ink">{selectedStaff.name}</h2>
+                        {selectedStaff.bio && <p className="mt-1 max-w-md text-sm font-medium leading-relaxed text-ink/60">{selectedStaff.bio}</p>}
+                      </div>
+                    </div>
+
+                    <button
+                      type="button"
+                      onClick={() => toggleBookable(selectedStaff)}
+                      className={selectedStaff.is_bookable ? "status-badge status-badge-success min-h-0 px-4 py-2" : "status-badge status-badge-muted min-h-0 px-4 py-2"}
+                    >
+                      {selectedStaff.is_bookable ? "Taking bookings" : "Not taking bookings"}
+                    </button>
+                  </div>
+
+                  <div>
+                    <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
+                      <h3 className="text-xs font-bold uppercase tracking-wider text-ink/55">Services</h3>
+                      <span className="text-xs font-semibold text-ink/55">{selectedServices.length} selected</span>
+                    </div>
+                    <div className="grid gap-2.5 sm:grid-cols-2">
+                      {services.map((service) => {
+                        const isAssigned = selectedServices.includes(service.id);
+                        return (
+                          <label
+                            key={service.id}
+                            className={[
+                              "flex cursor-pointer items-center justify-between rounded-xl border p-3 transition",
+                              isAssigned ? "border-action/20 bg-[#e8efe9]/70" : "border-line/70 bg-white hover:bg-[#f8faf9]",
+                            ].join(" ")}
+                          >
+                            <span className={isAssigned ? "text-xs font-bold text-ink" : "text-xs font-semibold text-ink/60"}>{service.name}</span>
+                            <input
+                              type="checkbox"
+                              className="h-4 w-4 accent-[#0e4731]"
+                              checked={isAssigned}
+                              onChange={() => toggleService(selectedStaff.id, service.id)}
+                            />
+                          </label>
+                        );
+                      })}
+                    </div>
+                  </div>
                 </div>
-                <div className="flex flex-wrap gap-2">
-                  <button type="submit" className="min-h-0 rounded-xl px-3 py-2 text-xs">Assign</button>
-                  <button className="danger-link min-h-0 rounded-xl px-3 py-2 text-xs" type="button" onClick={async () => { await api.deleteStaff(member.id); await load(); }}>
-                    Deactivate
+
+                <div className="mt-6 flex items-center justify-between border-t border-line/70 pt-5">
+                  <button type="button" onClick={() => deactivateStaff(selectedStaff.id)} className="danger-link min-h-0 rounded-xl px-4 py-2 text-xs">
+                    Remove from bookings
+                  </button>
+                  <button type="button" onClick={() => assignServices(selectedStaff.id)} className="min-h-0 rounded-xl px-6 py-2 text-xs">
+                    Save services
                   </button>
                 </div>
-              </form>
-            </article>
-          ))}
-          {staff.length === 0 && <p className="dashboard-card p-5 text-sm text-ink/65">No staff yet.</p>}
-        </section>
+              </>
+            ) : (
+              <div className="grid h-full place-items-center text-center">
+                <p className="muted">Add a staff member to assign services.</p>
+              </div>
+            )}
+          </section>
+        </div>
       </section>
+      {message && <p className="text-sm text-action">{message}</p>}
       {error && <p className="text-sm text-red-700">{error}</p>}
     </DashboardShell>
   );

@@ -25,6 +25,7 @@ class StaffResponse(BaseModel):
     avatar_url: str | None = None
     is_bookable: bool
     is_active: bool
+    service_ids: list[UUID] = Field(default_factory=list)
 
     model_config = {"from_attributes": True}
 

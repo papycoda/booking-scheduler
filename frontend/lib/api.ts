@@ -47,6 +47,7 @@ export type Staff = {
   avatar_url?: string | null;
   is_bookable: boolean;
   is_active: boolean;
+  service_ids?: string[];
 };
 
 export type Tenant = {

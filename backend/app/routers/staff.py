@@ -30,9 +30,28 @@ async def get_tenant_staff(db: AsyncSession, tenant_id: UUID, staff_id: UUID) ->
 async def list_staff(
     current_user: Annotated[User, Depends(get_current_user)],
     db: Annotated[AsyncSession, Depends(get_db)],
-) -> list[Staff]:
+) -> list[StaffResponse]:
     result = await db.execute(select(Staff).where(Staff.tenant_id == current_user.tenant_id).order_by(Staff.name))
-    return list(result.scalars().all())
+    staff_rows = list(result.scalars().all())
+    if not staff_rows:
+        return []
+
+    assignment_result = await db.execute(
+        select(staff_services.c.staff_id, staff_services.c.service_id)
+        .join(Service, Service.id == staff_services.c.service_id)
+        .where(
+            staff_services.c.staff_id.in_([staff.id for staff in staff_rows]),
+            Service.tenant_id == current_user.tenant_id,
+        )
+    )
+    service_ids_by_staff = {staff.id: [] for staff in staff_rows}
+    for staff_id, service_id in assignment_result.all():
+        service_ids_by_staff.setdefault(staff_id, []).append(service_id)
+
+    return [
+        StaffResponse.model_validate(staff).model_copy(update={"service_ids": service_ids_by_staff.get(staff.id, [])})
+        for staff in staff_rows
+    ]
 
 
 @router.post("", response_model=StaffResponse, status_code=status.HTTP_201_CREATED)

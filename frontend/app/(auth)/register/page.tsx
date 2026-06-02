@@ -25,7 +25,7 @@ export default function RegisterPage() {
         password: form.get("password"),
       });
       storeAccessToken(response.access_token);
-      window.location.href = "/dashboard";
+      window.location.href = "/onboarding";
     } catch (err) {
       setError(err instanceof Error ? err.message : "Unable to register");
       setIsSubmitting(false);
@@ -36,7 +36,7 @@ export default function RegisterPage() {
     <AuthShell
       eyebrow="Booking Scheduler"
       title="Run deposits, bookings, staff, and client intake from one dashboard."
-      description="Create your business account, publish a booking link, collect deposits, and let clients choose available times without signing up."
+      description="Create your business account, publish a booking link, collect deposits, and give clients a smooth way to choose the time that works."
       switchHref="/login"
       switchLabel="Login"
       formTitle="Create account"

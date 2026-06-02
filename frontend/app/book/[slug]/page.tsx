@@ -52,6 +52,19 @@ function StepHeader({ number, title, subtitle, icon }: { number: string; title: 
   );
 }
 
+function formatDateInput(date: Date) {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+}
+
+function addDays(date: Date, days: number) {
+  const next = new Date(date);
+  next.setDate(next.getDate() + days);
+  return next;
+}
+
 export default function PublicBookingPage({ params }: { params: { slug: string } }) {
   const [tenant, setTenant] = useState<Tenant | null>(null);
   const [services, setServices] = useState<Service[]>([]);
@@ -71,7 +84,22 @@ export default function PublicBookingPage({ params }: { params: { slug: string }
   const [submitLoading, setSubmitLoading] = useState(false);
   const [error, setError] = useState("");
   const selectedService = services.find((service) => service.id === serviceId);
-  const canSubmit = Boolean(serviceId && date && slot && fullName.trim() && email.trim()) && !submitLoading;
+  const selectedStaff = staff.find((member) => member.id === staffId);
+  const minDate = formatDateInput(new Date());
+  const maxDate = tenant ? formatDateInput(addDays(new Date(), tenant.advance_booking_days)) : undefined;
+  const dateValidationError =
+    date && date < minDate
+      ? "Choose today or a future date."
+      : date && maxDate && date > maxDate
+        ? `Choose a date within the next ${tenant?.advance_booking_days ?? 0} days.`
+        : "";
+  const hasSlotInputs = Boolean(serviceId && date && !dateValidationError);
+  const canSubmit = Boolean(serviceId && date && !dateValidationError && slot && fullName.trim() && email.trim()) && !submitLoading;
+  const selectedDateLabel = date
+    ? new Date(`${date}T00:00:00`).toLocaleDateString([], { month: "long", day: "numeric" })
+    : "";
+  const slotScopeLabel = selectedStaff ? selectedStaff.name : "any available staff";
+  const slotHeading = hasSlotInputs ? `Times for ${slotScopeLabel} on ${selectedDateLabel}` : "Available times";
 
   useEffect(() => {
     api.tenant(params.slug).then(setTenant).catch((err) => setError(err.message));
@@ -91,13 +119,14 @@ export default function PublicBookingPage({ params }: { params: { slug: string }
     setSlots([]);
     setSlot("");
     if (!serviceId || !date) return;
+    if (dateValidationError) return;
     setSlotsLoading(true);
     setError("");
     api.slots(params.slug, serviceId, date, staffId || undefined)
       .then(setSlots)
       .catch((err) => setError(err.message))
       .finally(() => setSlotsLoading(false));
-  }, [params.slug, serviceId, staffId, date]);
+  }, [params.slug, serviceId, staffId, date, dateValidationError]);
 
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -172,7 +201,7 @@ export default function PublicBookingPage({ params }: { params: { slug: string }
           <section className="grid gap-6">
             <StepHeader number="1" title="Service and time" subtitle="Step 1 of 2" icon="time" />
 
-            <div className="grid gap-5 md:grid-cols-2">
+            <div className="grid items-start gap-5 md:grid-cols-2">
               <label className="grid gap-2 text-sm font-semibold text-ink/75">
                 Service
                 <select className="rounded-xl bg-[#f8faf9]" value={serviceId} onChange={(event) => setServiceId(event.target.value)} required>
@@ -184,14 +213,26 @@ export default function PublicBookingPage({ params }: { params: { slug: string }
                 <label className="grid gap-2 text-sm font-semibold text-ink/75">
                   Staff
                   <select className="rounded-xl bg-[#f8faf9]" value={staffId} onChange={(event) => setStaffId(event.target.value)}>
-                    <option value="">Anyone available</option>
+                    <option value="">Any available staff</option>
                     {staff.map((member) => <option key={member.id} value={member.id}>{member.name}</option>)}
                   </select>
                 </label>
               )}
               <label className="grid gap-2 text-sm font-semibold text-ink/75 md:col-span-2">
                 Date
-                <input className="rounded-xl bg-[#f8faf9]" type="date" value={date} onChange={(event) => setDate(event.target.value)} required />
+                <input
+                  className="rounded-xl bg-[#f8faf9]"
+                  type="date"
+                  value={date}
+                  min={minDate}
+                  max={maxDate}
+                  onChange={(event) => setDate(event.target.value)}
+                  required
+                />
+                <span className="text-xs font-normal text-ink/55">
+                  Select a date from today{maxDate ? ` through ${new Date(`${maxDate}T00:00:00`).toLocaleDateString([], { month: "short", day: "numeric", year: "numeric" })}` : ""}.
+                </span>
+                {dateValidationError && <span className="text-xs font-semibold text-red-700">{dateValidationError}</span>}
               </label>
             </div>
 
@@ -204,11 +245,27 @@ export default function PublicBookingPage({ params }: { params: { slug: string }
 
             <div className="grid gap-3">
               <div className="flex items-center justify-between">
-                <p className="text-sm font-bold text-ink">Available times</p>
+                <div>
+                  <p className="text-sm font-bold text-ink">{slotHeading}</p>
+                  {hasSlotInputs && (
+                    <p className="mt-1 text-xs font-medium text-ink/55">
+                      {selectedStaff
+                        ? `Only ${selectedStaff.name}'s open times are shown.`
+                        : "These times have at least one eligible staff member available."}
+                    </p>
+                  )}
+                </div>
                 {slot && <p className="text-xs font-semibold text-action">Selected: {new Date(slot).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}</p>}
               </div>
               {slotsLoading && <p className="muted">Loading times...</p>}
-              {!slotsLoading && serviceId && date && slots.length === 0 && <p className="muted">No times available for this date.</p>}
+              {!slotsLoading && !serviceId && <p className="muted">Choose a service to see bookable times.</p>}
+              {!slotsLoading && serviceId && !date && <p className="muted">Choose a date to load available times.</p>}
+              {!slotsLoading && serviceId && date && dateValidationError && <p className="muted">{dateValidationError}</p>}
+              {!slotsLoading && serviceId && date && !dateValidationError && slots.length === 0 && (
+                <p className="muted">
+                  {selectedStaff ? `No times for ${selectedStaff.name} on this date. Try another staff member or date.` : "No times available for this date. Try another date."}
+                </p>
+              )}
               <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
                 {slots.map((item) => (
                   <button

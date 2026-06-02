@@ -137,6 +137,39 @@ class AvailabilityServiceTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(set(slots[0].available_staff), {self.staff_b})
         self.assertEqual(set(slots[1].available_staff), {self.staff_a, self.staff_b})
 
+    async def test_staff_booking_does_not_block_same_slot_for_other_staff(self):
+        self.bookings[self.staff_a] = [
+            SimpleNamespace(
+                start_time=datetime(2026, 6, 1, 8, 0, tzinfo=UTC),
+                end_time=datetime(2026, 6, 1, 9, 0, tzinfo=UTC),
+            )
+        ]
+
+        staff_a_slots = await self.generate(staff_id=self.staff_a)
+        staff_b_slots = await self.generate(staff_id=self.staff_b)
+
+        self.assertEqual([slot.start_time.hour for slot in staff_a_slots], [9])
+        self.assertEqual([slot.start_time.hour for slot in staff_b_slots], [8, 9])
+
+    async def test_business_wide_unavailability_blocks_all_staff(self):
+        self.windows[self.staff_a] = []
+        self.windows[self.staff_b] = []
+
+        slots = await self.generate()
+
+        self.assertEqual(slots, [])
+
+    async def test_staff_specific_unavailability_blocks_only_that_staff(self):
+        self.windows[self.staff_a] = []
+
+        staff_a_slots = await self.generate(staff_id=self.staff_a)
+        staff_b_slots = await self.generate(staff_id=self.staff_b)
+        anyone_slots = await self.generate()
+
+        self.assertEqual(staff_a_slots, [])
+        self.assertEqual([slot.start_time.hour for slot in staff_b_slots], [8, 9])
+        self.assertEqual([set(slot.available_staff) for slot in anyone_slots], [{self.staff_b}, {self.staff_b}])
+
     async def test_pending_reschedule_hold_blocks_requested_slot(self):
         self.reschedule_holds[self.staff_a] = [
             SimpleNamespace(
