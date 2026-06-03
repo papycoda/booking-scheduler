@@ -62,6 +62,11 @@ async def paystack_webhook(
                 logger.error("Payment %s has no booking", payment.id)
                 return JSONResponse(status_code=status.HTTP_200_OK, content={"status": "ok"})
 
+            # Fix 3: Prevent expired bookings from being resurrected by late webhooks
+            if payment.status == "expired" or booking.status == "expired":
+                logger.warning("Ignoring webhook for expired payment %s / booking %s", payment.id, booking.id)
+                return JSONResponse(status_code=status.HTTP_200_OK, content={"status": "ignored_expired"})
+
             payment.status = "success"
             payment.metadata_ = event
             from datetime import UTC, datetime

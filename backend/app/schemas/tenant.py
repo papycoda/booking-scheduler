@@ -1,7 +1,8 @@
 from decimal import Decimal
 from uuid import UUID
 
-from pydantic import BaseModel, Field, model_validator
+from pydantic import BaseModel, Field, model_validator, field_serializer
+from app.services.settlement_service import mask_account_number
 
 
 class TenantResponse(BaseModel):
@@ -13,13 +14,8 @@ class TenantResponse(BaseModel):
     timezone: str
     phone: str | None = None
     address: str | None = None
-    paystack_subaccount_code: str | None = None
-    paystack_business_name: str | None = None
-    payout_bank_code: str | None = None
     payout_bank_name: str | None = None
-    payout_account_number: str | None = None
     payout_account_name: str | None = None
-    payout_recipient_code: str | None = None
     payment_setup_status: str = "not_started"
     platform_fee_percentage: Decimal
     allow_staff_selection: bool
@@ -29,8 +25,41 @@ class TenantResponse(BaseModel):
     min_notice_hours: int
     cancellation_notice_hours: int
     status: str
+    masked_payout_account_number: str | None = None
+
+    @field_serializer('masked_payout_account_number')
+    def serialize_masked_account(self, value: str | None, _info) -> str | None:
+        # When using from_attributes, this receives the raw payout_account_number from the model
+        return mask_account_number(value)
 
     model_config = {"from_attributes": True}
+
+    @classmethod
+    def from_tenant(cls, tenant: "Tenant") -> "TenantResponse":
+        """Create response from tenant model with masked account number."""
+        data = {
+            "id": tenant.id,
+            "slug": tenant.slug,
+            "name": tenant.name,
+            "description": tenant.description,
+            "logo_url": tenant.logo_url,
+            "timezone": tenant.timezone,
+            "phone": tenant.phone,
+            "address": tenant.address,
+            "payout_bank_name": tenant.payout_bank_name,
+            "payout_account_name": tenant.payout_account_name,
+            "payment_setup_status": tenant.payment_setup_status,
+            "platform_fee_percentage": tenant.platform_fee_percentage,
+            "allow_staff_selection": tenant.allow_staff_selection,
+            "booking_buffer_minutes": tenant.booking_buffer_minutes,
+            "default_deposit_amount": tenant.default_deposit_amount,
+            "advance_booking_days": tenant.advance_booking_days,
+            "min_notice_hours": tenant.min_notice_hours,
+            "cancellation_notice_hours": tenant.cancellation_notice_hours,
+            "status": tenant.status,
+            "masked_payout_account_number": tenant.payout_account_number,
+        }
+        return cls(**data)
 
 
 class TenantUpdateRequest(BaseModel):
@@ -70,14 +99,15 @@ class PayoutSetupRequest(BaseModel):
 
 
 class PaystackStatusResponse(BaseModel):
-    paystack_subaccount_code: str | None = None
-    paystack_business_name: str | None = None
-    payout_bank_code: str | None = None
     payout_bank_name: str | None = None
-    payout_account_number: str | None = None
     payout_account_name: str | None = None
-    payout_recipient_code: str | None = None
+    masked_payout_account_number: str | None = None
     payment_setup_status: str = "not_started"
     payments_enabled: bool = True
     payout_ready: bool = False
     onboarded: bool
+    warning_message: str | None = None
+
+    @field_serializer('masked_payout_account_number')
+    def serialize_masked_account(self, value: str | None, _info) -> str | None:
+        return mask_account_number(value)

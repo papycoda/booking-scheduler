@@ -566,11 +566,11 @@ export default function OnboardingPage() {
               </label>
               <label className="grid gap-2 text-sm font-semibold text-ink/75">
                 Bank name
-                <input name="bank_name" defaultValue={tenant?.payout_bank_name ?? tenant?.payout_bank_code ?? ""} placeholder="GTBank, Access Bank, Zenith..." required />
+                <input name="bank_name" defaultValue={tenant?.payout_bank_name ?? ""} placeholder="GTBank, Access Bank, Zenith..." required />
               </label>
               <label className="grid gap-2 text-sm font-semibold text-ink/75">
                 Account number
-                <input name="account_number" defaultValue={tenant?.payout_account_number ?? ""} placeholder="10-digit account number" required />
+                <input name="account_number" placeholder="10-digit account number" required />
               </label>
               <div className="flex flex-wrap gap-3 sm:col-span-3">
                 <button type="submit">Save payout account</button>

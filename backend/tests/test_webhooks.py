@@ -175,3 +175,228 @@ class PaystackWebhookTests(unittest.TestCase):
         self.assertFalse(session.committed)
         self.assertEqual(payment.status, "pending")
         self.assertEqual(booking.status, "pending_payment")
+
+    def test_charge_success_with_mismatched_currency_is_ignored(self):
+        booking_id = uuid4()
+        payment = SimpleNamespace(
+            id=uuid4(),
+            booking_id=booking_id,
+            tenant_id=uuid4(),
+            paystack_reference="bk_reference",
+            status="pending",
+            amount=5_000,
+            currency="NGN",
+            collection_mode="platform_collected",
+            settlement_status="not_due",
+            metadata_=None,
+            paid_at=None,
+        )
+        booking = SimpleNamespace(id=booking_id, status="pending_payment")
+        session = FakeWebhookSession(payment, booking)
+        webhooks.SessionLocal = lambda: FakeSessionFactory(session)
+        event = {"event": "charge.success", "data": {"reference": "bk_reference", "amount": 5_000, "currency": "USD"}}
+        body = json.dumps(event).encode("utf-8")
+        signature = hmac.new(settings.paystack_secret_key.encode("utf-8"), body, hashlib.sha512).hexdigest()
+
+        response = __import__("asyncio").run(
+            webhooks.paystack_webhook(
+                FakeRequest(body, event),
+                BackgroundTasks(),
+                x_paystack_signature=signature,
+            )
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertFalse(session.committed)
+        self.assertEqual(payment.status, "pending")
+        self.assertEqual(booking.status, "pending_payment")
+
+    def test_charge_success_for_expired_payment_remains_expired(self):
+        booking_id = uuid4()
+        payment = SimpleNamespace(
+            id=uuid4(),
+            booking_id=booking_id,
+            tenant_id=uuid4(),
+            paystack_reference="bk_reference",
+            status="expired",
+            amount=5_000,
+            currency="NGN",
+            collection_mode="platform_collected",
+            settlement_status="not_due",
+            metadata_=None,
+            paid_at=None,
+        )
+        booking = SimpleNamespace(id=booking_id, status="pending_payment")
+        session = FakeWebhookSession(payment, booking)
+        webhooks.SessionLocal = lambda: FakeSessionFactory(session)
+        event = {"event": "charge.success", "data": {"reference": "bk_reference", "amount": 5_000, "currency": "NGN"}}
+        body = json.dumps(event).encode("utf-8")
+        signature = hmac.new(settings.paystack_secret_key.encode("utf-8"), body, hashlib.sha512).hexdigest()
+
+        response = __import__("asyncio").run(
+            webhooks.paystack_webhook(
+                FakeRequest(body, event),
+                BackgroundTasks(),
+                x_paystack_signature=signature,
+            )
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(json.loads(response.body.decode()), {"status": "ignored_expired"})
+        self.assertFalse(session.committed)
+        self.assertEqual(payment.status, "expired")
+        self.assertIsNone(payment.paid_at)
+        self.assertEqual(booking.status, "pending_payment")
+
+    def test_charge_success_for_expired_booking_remains_expired(self):
+        booking_id = uuid4()
+        payment = SimpleNamespace(
+            id=uuid4(),
+            booking_id=booking_id,
+            tenant_id=uuid4(),
+            paystack_reference="bk_reference",
+            status="pending",
+            amount=5_000,
+            currency="NGN",
+            collection_mode="platform_collected",
+            settlement_status="not_due",
+            metadata_=None,
+            paid_at=None,
+        )
+        booking = SimpleNamespace(id=booking_id, status="expired")
+        session = FakeWebhookSession(payment, booking)
+        webhooks.SessionLocal = lambda: FakeSessionFactory(session)
+        event = {"event": "charge.success", "data": {"reference": "bk_reference", "amount": 5_000, "currency": "NGN"}}
+        body = json.dumps(event).encode("utf-8")
+        signature = hmac.new(settings.paystack_secret_key.encode("utf-8"), body, hashlib.sha512).hexdigest()
+
+        response = __import__("asyncio").run(
+            webhooks.paystack_webhook(
+                FakeRequest(body, event),
+                BackgroundTasks(),
+                x_paystack_signature=signature,
+            )
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(json.loads(response.body.decode()), {"status": "ignored_expired"})
+        self.assertFalse(session.committed)
+        self.assertEqual(payment.status, "pending")
+        self.assertIsNone(payment.paid_at)
+        self.assertEqual(booking.status, "expired")
+
+    def test_valid_pending_payment_confirms_normally(self):
+        booking_id = uuid4()
+        payment = SimpleNamespace(
+            id=uuid4(),
+            booking_id=booking_id,
+            tenant_id=uuid4(),
+            paystack_reference="bk_reference",
+            status="pending",
+            amount=5_000,
+            currency="NGN",
+            collection_mode="platform_collected",
+            settlement_status="not_due",
+            metadata_=None,
+            paid_at=None,
+        )
+        booking = SimpleNamespace(id=booking_id, status="pending_payment")
+        session = FakeWebhookSession(payment, booking)
+        webhooks.SessionLocal = lambda: FakeSessionFactory(session)
+        event = {"event": "charge.success", "data": {"reference": "bk_reference", "amount": 5_000, "currency": "NGN"}}
+        body = json.dumps(event).encode("utf-8")
+        signature = hmac.new(settings.paystack_secret_key.encode("utf-8"), body, hashlib.sha512).hexdigest()
+        background_tasks = BackgroundTasks()
+
+        response = __import__("asyncio").run(
+            webhooks.paystack_webhook(
+                FakeRequest(body, event),
+                background_tasks,
+                x_paystack_signature=signature,
+            )
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertTrue(session.committed)
+        self.assertEqual(payment.status, "success")
+        self.assertEqual(payment.metadata_, event)
+        self.assertIsNotNone(payment.paid_at)
+        self.assertEqual(payment.settlement_status, "needs_setup")
+        self.assertEqual(booking.status, "confirmed")
+        self.assertEqual(len(background_tasks.tasks), 1)
+
+    def test_expired_payment_does_not_queue_payout(self):
+        booking_id = uuid4()
+        payment = SimpleNamespace(
+            id=uuid4(),
+            booking_id=booking_id,
+            tenant_id=uuid4(),
+            paystack_reference="bk_reference",
+            status="expired",
+            amount=5_000,
+            currency="NGN",
+            collection_mode="platform_collected",
+            settlement_status="not_due",
+            metadata_=None,
+            paid_at=None,
+        )
+        booking = SimpleNamespace(id=booking_id, status="pending_payment")
+        session = FakeWebhookSession(payment, booking)
+        webhooks.SessionLocal = lambda: FakeSessionFactory(session)
+        event = {"event": "charge.success", "data": {"reference": "bk_reference", "amount": 5_000, "currency": "NGN"}}
+        body = json.dumps(event).encode("utf-8")
+        signature = hmac.new(settings.paystack_secret_key.encode("utf-8"), body, hashlib.sha512).hexdigest()
+        background_tasks = BackgroundTasks()
+
+        response = __import__("asyncio").run(
+            webhooks.paystack_webhook(
+                FakeRequest(body, event),
+                background_tasks,
+                x_paystack_signature=signature,
+            )
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(json.loads(response.body.decode()), {"status": "ignored_expired"})
+        self.assertFalse(session.committed)
+        self.assertEqual(payment.status, "expired")
+        self.assertEqual(payment.settlement_status, "not_due")
+        self.assertEqual(len(background_tasks.tasks), 0)
+
+    def test_expired_booking_does_not_send_confirmation_notification(self):
+        booking_id = uuid4()
+        payment = SimpleNamespace(
+            id=uuid4(),
+            booking_id=booking_id,
+            tenant_id=uuid4(),
+            paystack_reference="bk_reference",
+            status="pending",
+            amount=5_000,
+            currency="NGN",
+            collection_mode="platform_collected",
+            settlement_status="not_due",
+            metadata_=None,
+            paid_at=None,
+        )
+        booking = SimpleNamespace(id=booking_id, status="expired")
+        session = FakeWebhookSession(payment, booking)
+        webhooks.SessionLocal = lambda: FakeSessionFactory(session)
+        event = {"event": "charge.success", "data": {"reference": "bk_reference", "amount": 5_000, "currency": "NGN"}}
+        body = json.dumps(event).encode("utf-8")
+        signature = hmac.new(settings.paystack_secret_key.encode("utf-8"), body, hashlib.sha512).hexdigest()
+        background_tasks = BackgroundTasks()
+
+        response = __import__("asyncio").run(
+            webhooks.paystack_webhook(
+                FakeRequest(body, event),
+                background_tasks,
+                x_paystack_signature=signature,
+            )
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(json.loads(response.body.decode()), {"status": "ignored_expired"})
+        self.assertFalse(session.committed)
+        self.assertEqual(payment.status, "pending")
+        self.assertEqual(booking.status, "expired")
+        self.assertEqual(len(background_tasks.tasks), 0)

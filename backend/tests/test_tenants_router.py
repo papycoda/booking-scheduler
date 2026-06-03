@@ -12,8 +12,15 @@ os.environ.setdefault("REDIS_URL", "redis://localhost:6379")
 os.environ.setdefault("PAYSTACK_SECRET_KEY", "sk_test_x")
 
 from app.routers import tenants as tenant_router  # noqa: E402
-from app.schemas.tenant import PayoutSetupRequest, PaystackOnboardingRequest, TenantUpdateRequest  # noqa: E402
+from app.schemas.tenant import (  # noqa: E402
+    PayoutSetupRequest,
+    PaystackOnboardingRequest,
+    PaystackStatusResponse,
+    TenantResponse,
+    TenantUpdateRequest,
+)
 from app.services.paystack_service import PaystackError  # noqa: E402
+from app.services.settlement_service import mask_account_number  # noqa: E402
 
 
 class FakeScalarResult:
@@ -269,5 +276,179 @@ class TenantRouterTests(unittest.IsolatedAsyncioTestCase):
 
         self.assertEqual(tenant.payout_bank_name, "GTBank")
         self.assertIsNone(tenant.payout_recipient_code)
-        self.assertEqual(tenant.payment_setup_status, "not_started")
+        self.assertEqual(tenant.payment_setup_status, "verification_failed")
         self.assertFalse(response.payout_ready)
+        self.assertEqual(
+            response.warning_message,
+            "We saved your details, but could not verify this payout account yet. Please check the bank name and account number."
+        )
+
+    async def test_paystack_status_masks_account_number(self):
+        tenant = SimpleNamespace(
+            id=uuid4(),
+            payout_bank_name="GTBank",
+            payout_account_name="Ada Hair Ltd",
+            payout_account_number="0123456789",
+            payout_recipient_code="RCP_test",
+            payment_setup_status="bank_added",
+        )
+
+        response = tenant_router.tenant_payment_status(tenant)
+
+        # Field serializer applies on serialization (model_dump), not direct access
+        response_dict = response.model_dump()
+        self.assertEqual(response_dict["masked_payout_account_number"], "******6789")
+
+    async def test_paystack_status_masks_account_number_with_none(self):
+        tenant = SimpleNamespace(
+            id=uuid4(),
+            payout_bank_name=None,
+            payout_account_name=None,
+            payout_account_number=None,
+            payout_recipient_code=None,
+            payment_setup_status="not_started",
+        )
+
+        response = tenant_router.tenant_payment_status(tenant)
+
+        self.assertIsNone(response.masked_payout_account_number)
+
+    async def test_paystack_status_does_not_return_provider_codes(self):
+        tenant = SimpleNamespace(
+            id=uuid4(),
+            payout_bank_name="GTBank",
+            payout_account_name="Ada Hair Ltd",
+            payout_account_number="0123456789",
+            payout_recipient_code="RCP_test",
+            paystack_subaccount_code="ACCT_test",
+            payment_setup_status="split_ready",
+        )
+
+        response = tenant_router.tenant_payment_status(tenant)
+
+        # PaystackStatusResponse should not have these fields
+        self.assertFalse(hasattr(response, "paystack_subaccount_code"))
+        self.assertFalse(hasattr(response, "payout_recipient_code"))
+
+    async def test_paystack_status_includes_warning_message(self):
+        tenant = SimpleNamespace(
+            id=uuid4(),
+            payout_bank_name="GTBank",
+            payout_account_name="Ada Hair Ltd",
+            payout_account_number="0123456789",
+            payout_recipient_code=None,
+            payment_setup_status="verification_failed",
+        )
+
+        warning = "We saved your details, but could not verify this payout account yet. Please check the bank name and account number."
+        response = tenant_router.tenant_payment_status(tenant, warning_message=warning)
+
+        self.assertEqual(response.warning_message, warning)
+        self.assertFalse(response.payout_ready)
+
+    async def test_tenant_response_masks_account_number(self):
+        tenant_dict = {
+            "id": uuid4(),
+            "slug": "ada-hair",
+            "name": "Ada Hair",
+            "description": None,
+            "logo_url": None,
+            "timezone": "Africa/Lagos",
+            "phone": None,
+            "address": None,
+            "payout_bank_name": "GTBank",
+            "payout_account_name": "Ada Hair Ltd",
+            "payment_setup_status": "bank_added",
+            "platform_fee_percentage": Decimal("5.00"),
+            "allow_staff_selection": True,
+            "booking_buffer_minutes": 15,
+            "default_deposit_amount": 1000,
+            "advance_booking_days": 30,
+            "min_notice_hours": 2,
+            "cancellation_notice_hours": 24,
+            "status": "active",
+            "masked_payout_account_number": "0123456789",  # Raw account number passed in
+        }
+
+        response = TenantResponse(**tenant_dict)
+
+        # Field serializer applies on serialization (model_dump), not direct access
+        response_dict = response.model_dump()
+        self.assertEqual(response_dict["masked_payout_account_number"], "******6789")
+
+    async def test_tenant_response_handles_none_account_number(self):
+        tenant_dict = {
+            "id": uuid4(),
+            "slug": "ada-hair",
+            "name": "Ada Hair",
+            "description": None,
+            "logo_url": None,
+            "timezone": "Africa/Lagos",
+            "phone": None,
+            "address": None,
+            "payout_bank_name": None,
+            "payout_account_name": None,
+            "payment_setup_status": "not_started",
+            "platform_fee_percentage": Decimal("5.00"),
+            "allow_staff_selection": True,
+            "booking_buffer_minutes": 15,
+            "default_deposit_amount": 1000,
+            "advance_booking_days": 30,
+            "min_notice_hours": 2,
+            "cancellation_notice_hours": 24,
+            "status": "active",
+            "masked_payout_account_number": None,
+        }
+
+        response = TenantResponse(**tenant_dict)
+
+        self.assertIsNone(response.masked_payout_account_number)
+
+    async def test_payout_setup_verification_failed_returns_warning(self):
+        tenant = SimpleNamespace(
+            id=uuid4(),
+            payout_bank_code=None,
+            payout_bank_name=None,
+            payout_account_number=None,
+            payout_account_name=None,
+            payout_recipient_code=None,
+            payment_setup_status="not_started",
+        )
+
+        async def resolve_bank_code(_bank_name):
+            return ("058", "GTBank")
+
+        async def create_transfer_recipient(**_kwargs):
+            raise PaystackError("failed")
+
+        tenant_router.resolve_bank_code = resolve_bank_code
+        tenant_router.create_transfer_recipient = create_transfer_recipient
+
+        response = await tenant_router.save_payout_setup(
+            PayoutSetupRequest(
+                bank_name="GTBank",
+                account_number="0123456789",
+                account_name="Ada Hair Ltd",
+            ),
+            SimpleNamespace(tenant_id=tenant.id),
+            FakeTenantSession(tenant),
+        )
+
+        # Verify details were saved
+        self.assertEqual(tenant.payout_bank_name, "GTBank")
+        self.assertEqual(tenant.payout_account_number, "0123456789")
+        self.assertEqual(tenant.payout_account_name, "Ada Hair Ltd")
+
+        # Verify payout is blocked due to failed verification
+        self.assertIsNone(tenant.payout_recipient_code)
+        self.assertFalse(response.payout_ready)
+
+        # Verify user-safe warning message is returned
+        self.assertEqual(
+            response.warning_message,
+            "We saved your details, but could not verify this payout account yet. Please check the bank name and account number."
+        )
+
+        # Verify the account number is masked in serialized response
+        response_dict = response.model_dump()
+        self.assertEqual(response_dict["masked_payout_account_number"], "******6789")

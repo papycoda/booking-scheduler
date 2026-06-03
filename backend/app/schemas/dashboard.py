@@ -1,7 +1,8 @@
 from datetime import date, datetime
 from uuid import UUID
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_serializer
+from app.services.settlement_service import mask_account_number
 
 
 class DashboardBookingResponse(BaseModel):
@@ -79,7 +80,13 @@ class DashboardPayoutDetailResponse(BaseModel):
     last_payout_error: str | None = None
     next_payout_attempt_at: datetime | None = None
     payout_transfer_reference: str | None = None
-    payout_transfer_code: str | None = None
+    payout_account_name: str | None = None
+    payout_bank_name: str | None = None
+    masked_payout_account_number: str | None = None
+
+    @field_serializer('masked_payout_account_number')
+    def serialize_masked_account(self, value: str | None, _info) -> str | None:
+        return mask_account_number(value)
 
 
 class AnalyticsOverviewResponse(BaseModel):

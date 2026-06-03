@@ -21,6 +21,7 @@ export default function SettingsPage() {
   const [activeSection, setActiveSection] = useState("booking-link");
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
+  const [payoutWarning, setPayoutWarning] = useState("");
 
   useEffect(() => {
     setPublicOrigin(window.location.origin);
@@ -29,6 +30,9 @@ export default function SettingsPage() {
         setTenant(tenantRow);
         setSlugDraft(tenantRow.slug);
         setPaymentStatus(status);
+        if (status.warning_message) {
+          setPayoutWarning(status.warning_message);
+        }
       })
       .catch((err) => setError(err.message));
   }, []);
@@ -93,6 +97,7 @@ export default function SettingsPage() {
     event.preventDefault();
     setError("");
     setMessage("");
+    setPayoutWarning("");
     const form = new FormData(event.currentTarget);
     const status = await api.savePayoutSetup({
       account_name: form.get("account_name") || null,
@@ -104,21 +109,21 @@ export default function SettingsPage() {
       current
         ? {
             ...current,
-            payout_bank_code: status.payout_bank_code,
             payout_bank_name: status.payout_bank_name,
-            payout_account_number: status.payout_account_number,
             payout_account_name: status.payout_account_name,
-            payout_recipient_code: status.payout_recipient_code,
             payment_setup_status: status.payment_setup_status,
           }
         : current,
     );
-    setMessage("Payout account saved");
+    if (status.warning_message) {
+      setPayoutWarning(status.warning_message);
+    }
+    if (status.payout_ready) {
+      setMessage("Payout account saved");
+    }
   }
 
-  // NOTE: Backend handles Paystack subaccount creation automatically when payout details are saved.
-  // The simplified UX only shows one form for payout account setup.
-  // If split-payment routing is needed later, backend can create subaccounts transparently.
+  // Backend handles account verification automatically when payout details are saved.
 
   const publicBookingUrl = `${publicOrigin}/book/${slugDraft || tenant?.slug || ""}`;
 
@@ -243,22 +248,23 @@ export default function SettingsPage() {
               This is the bank account where Bookie will send money from your paid bookings.
             </p>
 
-            {paymentStatus?.payout_ready && tenant?.payout_account_name ? (
+            {paymentStatus?.payout_ready && paymentStatus?.payout_account_name ? (
               <div className="mt-5 rounded-2xl border border-[#0e4731]/15 bg-[#e8efe9] p-5">
                 <h3 className="text-lg font-semibold text-[#0f2119]">Payout account saved</h3>
                 <p className="bookie-subtitle mt-1">
                   Money from paid bookings will be sent to:
                 </p>
                 <div className="mt-4 space-y-1 text-sm font-semibold text-[#0f2119]">
-                  <p>{tenant.payout_account_name}</p>
-                  <p>{tenant.payout_bank_name}</p>
-                  <p>{tenant.payout_account_number}</p>
+                  <p>{paymentStatus.payout_account_name}</p>
+                  <p>{paymentStatus.payout_bank_name}</p>
+                  <p>{paymentStatus.masked_payout_account_number}</p>
                 </div>
                 <button
                   type="button"
                   className="mt-4 secondary-button text-sm"
                   onClick={() => {
                     setPaymentStatus((prev) => prev ? { ...prev, payout_ready: false } : null);
+                    setPayoutWarning("");
                   }}
                 >
                   Edit payout account
@@ -271,7 +277,7 @@ export default function SettingsPage() {
                   <input
                     name="account_name"
                     placeholder="Account holder name"
-                    defaultValue={tenant?.payout_account_name ?? tenant?.name ?? ""}
+                    defaultValue={paymentStatus?.payout_account_name ?? tenant?.payout_account_name ?? tenant?.name ?? ""}
                   />
                 </label>
                 <label className="bookie-label">
@@ -279,7 +285,7 @@ export default function SettingsPage() {
                   <input
                     name="bank_name"
                     placeholder="GTBank, Access Bank, Zenith..."
-                    defaultValue={tenant?.payout_bank_name ?? tenant?.payout_bank_code ?? ""}
+                    defaultValue={paymentStatus?.payout_bank_name ?? tenant?.payout_bank_name ?? ""}
                     required
                   />
                 </label>
@@ -288,7 +294,6 @@ export default function SettingsPage() {
                   <input
                     name="account_number"
                     placeholder="10-digit account number"
-                    defaultValue={tenant?.payout_account_number ?? ""}
                     required
                   />
                 </label>
@@ -298,6 +303,7 @@ export default function SettingsPage() {
           </section>
 
           {message && <p className="rounded-xl border border-[#0e4731]/15 bg-[#e8efe9] px-4 py-3 text-sm font-semibold text-[#0e4731]">{message}</p>}
+          {payoutWarning && <p className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm font-semibold text-amber-700">{payoutWarning}</p>}
           {error && <p className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm font-semibold text-red-700">{error}</p>}
         </div>
       </section>

@@ -98,10 +98,14 @@ async def save_payout_setup(
 ) -> PaystackStatusResponse:
     tenant = await get_current_tenant(db, current_user)
     bank_input = payload.bank_name or payload.bank_code or ""
+    warning_message = None
+    verification_failed = False
+
     try:
         bank_code, bank_name = await resolve_bank_code(bank_input)
     except PaystackError:
         bank_code, bank_name = bank_input, bank_input
+        verification_failed = True
 
     tenant.payout_bank_code = bank_code
     tenant.payout_bank_name = bank_name
@@ -117,9 +121,15 @@ async def save_payout_setup(
         tenant.payment_setup_status = "bank_added" if tenant.payout_recipient_code else "not_started"
     except PaystackError:
         tenant.payout_recipient_code = None
-        tenant.payment_setup_status = "not_started"
+        tenant.payment_setup_status = "verification_failed"
+        verification_failed = True
     await db.commit()
-    return tenant_payment_status(tenant)
+
+    # Set user-safe warning message if verification failed
+    if verification_failed:
+        warning_message = "We saved your details, but could not verify this payout account yet. Please check the bank name and account number."
+
+    return tenant_payment_status(tenant, warning_message=warning_message)
 
 
 @router.get("/me/paystack", response_model=PaystackStatusResponse)
@@ -131,17 +141,14 @@ async def paystack_status(
     return tenant_payment_status(tenant)
 
 
-def tenant_payment_status(tenant: Tenant) -> PaystackStatusResponse:
+def tenant_payment_status(tenant: Tenant, warning_message: str | None = None) -> PaystackStatusResponse:
     return PaystackStatusResponse(
-        paystack_subaccount_code=getattr(tenant, "paystack_subaccount_code", None),
-        paystack_business_name=getattr(tenant, "paystack_business_name", None),
-        payout_bank_code=getattr(tenant, "payout_bank_code", None),
         payout_bank_name=getattr(tenant, "payout_bank_name", None),
-        payout_account_number=getattr(tenant, "payout_account_number", None),
         payout_account_name=getattr(tenant, "payout_account_name", None),
-        payout_recipient_code=getattr(tenant, "payout_recipient_code", None),
+        masked_payout_account_number=getattr(tenant, "payout_account_number", None),
         payment_setup_status=getattr(tenant, "payment_setup_status", "not_started"),
         payments_enabled=True,
         payout_ready=bool(getattr(tenant, "payout_recipient_code", None) or getattr(tenant, "paystack_subaccount_code", None)),
         onboarded=getattr(tenant, "paystack_subaccount_code", None) is not None,
+        warning_message=warning_message,
     )

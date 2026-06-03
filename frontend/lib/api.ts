@@ -59,13 +59,9 @@ export type Tenant = {
   timezone: string;
   phone?: string | null;
   address?: string | null;
-  paystack_subaccount_code?: string | null;
-  paystack_business_name?: string | null;
-  payout_bank_code?: string | null;
   payout_bank_name?: string | null;
-  payout_account_number?: string | null;
   payout_account_name?: string | null;
-  payout_recipient_code?: string | null;
+  masked_payout_account_number?: string | null;
   payment_setup_status?: string;
   platform_fee_percentage?: string;
   allow_staff_selection: boolean;
@@ -157,17 +153,14 @@ export type DashboardRescheduleRequest = {
 };
 
 export type PaymentSetupStatus = {
-  paystack_subaccount_code?: string | null;
-  paystack_business_name?: string | null;
-  payout_bank_code?: string | null;
   payout_bank_name?: string | null;
-  payout_account_number?: string | null;
   payout_account_name?: string | null;
-  payout_recipient_code?: string | null;
+  masked_payout_account_number?: string | null;
   payment_setup_status: string;
   payments_enabled: boolean;
   payout_ready: boolean;
   onboarded: boolean;
+  warning_message?: string | null;
 };
 
 export type DashboardPayout = {

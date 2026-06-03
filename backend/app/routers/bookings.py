@@ -12,6 +12,7 @@ from app.models.booking import Booking, BookingInspoAsset, BookingRescheduleRequ
 from app.models.payment import Payment
 from app.models.service import Service
 from app.models.staff import Staff
+from app.models.tenant import Tenant
 from app.models.user import User
 from app.schemas.dashboard import (
     AnalyticsOverviewResponse,
@@ -202,6 +203,12 @@ async def list_dashboard_payouts(
     current_user: Annotated[User, Depends(get_current_user)],
     db: Annotated[AsyncSession, Depends(get_db)],
 ) -> list[DashboardPayoutDetailResponse]:
+    # Load tenant for payout account information
+    tenant_result = await db.execute(
+        select(Tenant).where(Tenant.id == current_user.tenant_id)
+    )
+    tenant = tenant_result.scalar_one_or_none()
+
     result = await db.execute(
         select(Payment, Booking, Client, Service)
         .join(Booking, Booking.id == Payment.booking_id)
@@ -225,7 +232,9 @@ async def list_dashboard_payouts(
             last_payout_error=getattr(payment, "last_payout_error", None),
             next_payout_attempt_at=getattr(payment, "next_payout_attempt_at", None),
             payout_transfer_reference=payment.payout_transfer_reference,
-            payout_transfer_code=payment.payout_transfer_code,
+            payout_account_name=getattr(tenant, "payout_account_name", None) if tenant else None,
+            payout_bank_name=getattr(tenant, "payout_bank_name", None) if tenant else None,
+            masked_payout_account_number=getattr(tenant, "payout_account_number", None) if tenant else None,
         )
         for payment, booking, client, service in result.all()
     ]
@@ -237,6 +246,19 @@ async def approve_dashboard_payout(
     current_user: Annotated[User, Depends(get_current_user)],
     db: Annotated[AsyncSession, Depends(get_db)],
 ) -> DashboardPayoutResponse:
+    # Load payment first to check settlement_status before approving
+    payment_result = await db.execute(
+        select(Payment).where(Payment.tenant_id == current_user.tenant_id, Payment.id == payment_id)
+    )
+    payment = payment_result.scalar_one_or_none()
+    if payment is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail={"error": "PAYMENT_NOT_FOUND", "message": "Payment was not found."})
+    if payment.settlement_status == "needs_review":
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail={"error": "PAYOUT_REVIEW_REQUIRED", "message": "This payout needs manual review before it can be sent."}
+        )
+
     payment = await approve_payout(db, tenant_id=current_user.tenant_id, payment_id=payment_id)
     return DashboardPayoutResponse(
         payment_id=payment.id,
@@ -252,6 +274,19 @@ async def retry_dashboard_payout(
     current_user: Annotated[User, Depends(get_current_user)],
     db: Annotated[AsyncSession, Depends(get_db)],
 ) -> DashboardPayoutResponse:
+    # Load payment first to check settlement_status before retrying
+    payment_result = await db.execute(
+        select(Payment).where(Payment.tenant_id == current_user.tenant_id, Payment.id == payment_id)
+    )
+    payment = payment_result.scalar_one_or_none()
+    if payment is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail={"error": "PAYMENT_NOT_FOUND", "message": "Payment was not found."})
+    if payment.settlement_status == "needs_review":
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail={"error": "PAYOUT_REVIEW_REQUIRED", "message": "This payout needs manual review before it can be sent."}
+        )
+
     payment = await approve_payout(db, tenant_id=current_user.tenant_id, payment_id=payment_id)
     return DashboardPayoutResponse(
         payment_id=payment.id,

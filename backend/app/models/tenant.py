@@ -41,6 +41,7 @@ class Tenant(UUIDPrimaryKeyMixin, Base):
     min_notice_hours: Mapped[int] = mapped_column(Integer, nullable=False, server_default="2")
     cancellation_notice_hours: Mapped[int] = mapped_column(Integer, nullable=False, server_default="24")
     status: Mapped[str] = mapped_column(String(20), nullable=False, server_default="active")
+    first_payout_review_completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True, default=None)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, server_default=text("NOW()"))
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, server_default=text("NOW()"))
 
