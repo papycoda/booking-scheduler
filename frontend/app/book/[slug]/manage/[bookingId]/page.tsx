@@ -1,7 +1,7 @@
 "use client";
 
 import { FormEvent, useEffect, useState } from "react";
-import { api, formatNgn, ManagedBooking, Slot } from "../../../../../lib/api";
+import { api, bookingStatusLabel, formatNgn, ManagedBooking, Slot } from "../../../../../lib/api";
 
 export default function ManageBookingPage({
   params,
@@ -75,7 +75,7 @@ export default function ManageBookingPage({
         staff_id: booking?.staff_id,
         note: note || null,
       });
-      setMessage("Reschedule request sent. The requested slot is held for 24 hours while the business reviews it.");
+      setMessage("Request sent. This time is held while the business checks it.");
       setDate("");
       setSlots([]);
       setSelectedSlot("");
@@ -89,21 +89,21 @@ export default function ManageBookingPage({
   }
 
   return (
-    <main className="min-h-screen bg-gradient-to-br from-[#c8d6cd] via-[#f3f6f4] to-[#dde5e0] px-4 py-8 text-ink sm:px-6 lg:px-8">
+    <main className="min-h-screen bg-[#f5f8f6] px-4 py-8 text-ink sm:px-6 lg:px-8">
       <div className="mx-auto grid w-full max-w-5xl gap-6">
         <section className="public-glass grid gap-5 p-6 sm:p-8">
           <div className="flex flex-wrap items-start justify-between gap-4">
             <div>
-              <p className="eyebrow">Manage booking</p>
+              <p className="eyebrow">Your booking</p>
               <h1 className="mt-2 text-3xl font-bold tracking-normal">{booking?.service_name ?? "Booking details"}</h1>
             </div>
-            {booking && <span className="status-badge status-badge-success">{booking.booking_status}</span>}
+            {booking && <span className="status-badge status-badge-success">{bookingStatusLabel(booking.booking_status)}</span>}
           </div>
 
           {booking && (
             <div className="grid gap-3 sm:grid-cols-4">
               <div className="finance-card">
-                <p className="muted">Time</p>
+                <p className="muted">Appointment time</p>
                 <strong className="mt-1 block text-sm">{new Date(booking.start_time).toLocaleString()}</strong>
               </div>
               <div className="finance-card">
@@ -115,14 +115,14 @@ export default function ManageBookingPage({
                 <strong className="mt-1 block text-sm">{formatNgn(booking.deposit_amount)}</strong>
               </div>
               <div className="finance-card">
-                <p className="muted">Price</p>
-                <strong className="mt-1 block text-sm">{booking.quoted_price ? formatNgn(booking.quoted_price) : booking.price_status}</strong>
+                <p className="muted">Final price</p>
+                <strong className="mt-1 block text-sm">{booking.quoted_price ? formatNgn(booking.quoted_price) : "To be agreed"}</strong>
               </div>
             </div>
           )}
 
           <p className="rounded-xl border border-[#caa26b]/35 bg-[#fffaf2] px-4 py-3 text-sm font-medium text-[#7a5424]">
-            Deposits are non-refundable. Cancelling or requesting a reschedule does not refund the deposit.
+            Deposit is not refunded when you cancel or ask to move the booking.
           </p>
           {message && <p className="rounded-xl border border-action/20 bg-green-50 px-4 py-3 text-sm font-medium text-action">{message}</p>}
           {error && <p className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm font-medium text-red-700">{error}</p>}
@@ -132,9 +132,9 @@ export default function ManageBookingPage({
           <section className="grid gap-6 lg:grid-cols-[1.2fr_0.8fr]">
             <form onSubmit={requestReschedule} className="public-glass grid gap-4 p-6">
               <div>
-                <p className="eyebrow">Reschedule</p>
-                <h2 className="section-title">Request a new time</h2>
-                <p className="muted mt-1">The business must approve the change. Requested slots are held for 24 hours.</p>
+                <p className="eyebrow">Move booking</p>
+                <h2 className="section-title">Ask for a new time</h2>
+                <p className="muted mt-1">Pick a new time. The business will confirm if it works.</p>
               </div>
               <input type="date" value={date} onChange={(event) => setDate(event.target.value)} />
               {loadingSlots && <p className="muted">Loading times...</p>}
@@ -152,18 +152,18 @@ export default function ManageBookingPage({
                   </button>
                 ))}
               </div>
-              {selectedSlot && <p className="tag w-fit">Requested: {new Date(selectedSlot).toLocaleString()}</p>}
+              {selectedSlot && <p className="tag w-fit">New time: {new Date(selectedSlot).toLocaleString()}</p>}
               <textarea placeholder="Optional note for the business" value={note} onChange={(event) => setNote(event.target.value)} />
-              <button type="submit" disabled={!selectedSlot || busy}>Request reschedule</button>
+              <button type="submit" disabled={!selectedSlot || busy}>Ask to move booking</button>
             </form>
 
             <section className="public-glass grid gap-4 p-6">
               <div>
                 <p className="eyebrow">Cancel</p>
                 <h2 className="section-title">Cancel this booking</h2>
-                <p className="muted mt-1">Available until {new Date(booking.cancellation_deadline).toLocaleString()}.</p>
+                <p className="muted mt-1">You can cancel until {new Date(booking.cancellation_deadline).toLocaleString()}.</p>
               </div>
-              <textarea placeholder="Reason for cancellation" value={cancelReason} onChange={(event) => setCancelReason(event.target.value)} />
+              <textarea placeholder="Reason for cancelling" value={cancelReason} onChange={(event) => setCancelReason(event.target.value)} />
               <button className="danger-link" type="button" disabled={!booking.can_cancel || busy} onClick={cancelBooking}>
                 Cancel booking
               </button>
@@ -175,12 +175,12 @@ export default function ManageBookingPage({
           <section className="public-glass grid gap-3 p-6">
             <div>
               <p className="eyebrow">Requests</p>
-              <h2 className="section-title">Reschedule history</h2>
+              <h2 className="section-title">Move requests</h2>
             </div>
             {(booking?.pending_reschedule_requests ?? []).map((request) => (
               <div key={request.id} className="rounded-2xl border border-line/70 bg-[#fcfdfe] p-4">
                 <strong>{new Date(request.requested_start_time).toLocaleString()}</strong>
-                <span className="muted mt-1 block">{request.status} with {request.staff_name ?? "staff"} until {new Date(request.hold_expires_at).toLocaleString()}</span>
+                <span className="muted mt-1 block">Reviewing with {request.staff_name ?? "staff"} until {new Date(request.hold_expires_at).toLocaleString()}</span>
                 {request.client_note && <span className="mt-1 block text-sm text-ink/70">{request.client_note}</span>}
               </div>
             ))}

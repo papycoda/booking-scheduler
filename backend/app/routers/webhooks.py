@@ -11,7 +11,9 @@ from app.config import settings
 from app.database import SessionLocal
 from app.models.booking import Booking
 from app.models.payment import Payment
+from app.models.tenant import Tenant
 from app.services.notification_service import send_booking_confirmation
+from app.services.settlement_service import queue_payment_for_payout
 
 logger = logging.getLogger(__name__)
 
@@ -50,6 +52,9 @@ async def paystack_webhook(
             payment = result.scalar_one_or_none()
             if payment is None or payment.status == "success":
                 return JSONResponse(status_code=status.HTTP_200_OK, content={"status": "ok"})
+            if not verify_paystack_charge_success(event, payment):
+                logger.error("Paystack charge.success verification failed for reference %s", reference)
+                return JSONResponse(status_code=status.HTTP_200_OK, content={"status": "ignored"})
 
             booking_result = await db.execute(select(Booking).where(Booking.id == payment.booking_id))
             booking = booking_result.scalar_one_or_none()
@@ -63,7 +68,8 @@ async def paystack_webhook(
 
             payment.paid_at = datetime.now(UTC)
             if getattr(payment, "collection_mode", "platform_collected") == "platform_collected":
-                payment.settlement_status = "pending"
+                tenant_result = await db.execute(select(Tenant).where(Tenant.id == payment.tenant_id))
+                await queue_payment_for_payout(db, payment=payment, tenant=tenant_result.scalar_one_or_none())
             booking.status = "confirmed"
             await db.commit()
             background_tasks.add_task(send_booking_confirmation_for_booking, booking.id)
@@ -72,6 +78,17 @@ async def paystack_webhook(
         return JSONResponse(status_code=status.HTTP_200_OK, content={"status": "error_logged"})
 
     return JSONResponse(status_code=status.HTTP_200_OK, content={"status": "ok"})
+
+
+def verify_paystack_charge_success(event: dict, payment: Payment) -> bool:
+    data = event.get("data") or {}
+    try:
+        amount = int(data.get("amount"))
+    except (TypeError, ValueError):
+        return False
+    currency = str(data.get("currency") or "").upper()
+    reference = str(data.get("reference") or "").strip()
+    return reference == payment.paystack_reference and amount == payment.amount and currency == payment.currency.upper()
 
 
 async def send_booking_confirmation_for_booking(booking_id: UUID) -> None:

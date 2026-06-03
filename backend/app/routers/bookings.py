@@ -17,12 +17,13 @@ from app.schemas.dashboard import (
     AnalyticsOverviewResponse,
     DashboardBookingResponse,
     DashboardBookingStatusUpdate,
+    DashboardPayoutDetailResponse,
     DashboardPayoutResponse,
     DashboardRescheduleDecision,
     DashboardRescheduleRequestResponse,
 )
 from app.services.booking_management_service import decide_reschedule_request, dashboard_reschedule_row_to_response
-from app.services.settlement_service import initiate_platform_collected_payout
+from app.services.settlement_service import approve_payout, initiate_platform_collected_payout
 
 router = APIRouter(prefix="/dashboard", tags=["dashboard"])
 
@@ -188,6 +189,70 @@ async def initiate_dashboard_payout(
     db: Annotated[AsyncSession, Depends(get_db)],
 ) -> DashboardPayoutResponse:
     payment = await initiate_platform_collected_payout(db, tenant_id=current_user.tenant_id, payment_id=payment_id)
+    return DashboardPayoutResponse(
+        payment_id=payment.id,
+        settlement_status=payment.settlement_status,
+        payout_transfer_reference=payment.payout_transfer_reference,
+        payout_transfer_code=payment.payout_transfer_code,
+    )
+
+
+@router.get("/payouts", response_model=list[DashboardPayoutDetailResponse])
+async def list_dashboard_payouts(
+    current_user: Annotated[User, Depends(get_current_user)],
+    db: Annotated[AsyncSession, Depends(get_db)],
+) -> list[DashboardPayoutDetailResponse]:
+    result = await db.execute(
+        select(Payment, Booking, Client, Service)
+        .join(Booking, Booking.id == Payment.booking_id)
+        .join(Client, Client.id == Booking.client_id)
+        .join(Service, Service.id == Booking.service_id)
+        .where(Payment.tenant_id == current_user.tenant_id, Payment.collection_mode == "platform_collected")
+        .order_by(Payment.created_at.desc())
+    )
+    return [
+        DashboardPayoutDetailResponse(
+            payment_id=payment.id,
+            booking_id=booking.id,
+            client_name=client.full_name,
+            service_name=service.name,
+            amount=payment.amount,
+            platform_fee_amount=payment.platform_fee_amount,
+            business_net_amount=payment.business_net_amount,
+            settlement_status=payment.settlement_status,
+            payout_attempt_count=getattr(payment, "payout_attempt_count", 0),
+            payout_review_reason=getattr(payment, "payout_review_reason", None),
+            last_payout_error=getattr(payment, "last_payout_error", None),
+            next_payout_attempt_at=getattr(payment, "next_payout_attempt_at", None),
+            payout_transfer_reference=payment.payout_transfer_reference,
+            payout_transfer_code=payment.payout_transfer_code,
+        )
+        for payment, booking, client, service in result.all()
+    ]
+
+
+@router.post("/payouts/{payment_id}/approve", response_model=DashboardPayoutResponse)
+async def approve_dashboard_payout(
+    payment_id: UUID,
+    current_user: Annotated[User, Depends(get_current_user)],
+    db: Annotated[AsyncSession, Depends(get_db)],
+) -> DashboardPayoutResponse:
+    payment = await approve_payout(db, tenant_id=current_user.tenant_id, payment_id=payment_id)
+    return DashboardPayoutResponse(
+        payment_id=payment.id,
+        settlement_status=payment.settlement_status,
+        payout_transfer_reference=payment.payout_transfer_reference,
+        payout_transfer_code=payment.payout_transfer_code,
+    )
+
+
+@router.post("/payouts/{payment_id}/retry", response_model=DashboardPayoutResponse)
+async def retry_dashboard_payout(
+    payment_id: UUID,
+    current_user: Annotated[User, Depends(get_current_user)],
+    db: Annotated[AsyncSession, Depends(get_db)],
+) -> DashboardPayoutResponse:
+    payment = await approve_payout(db, tenant_id=current_user.tenant_id, payment_id=payment_id)
     return DashboardPayoutResponse(
         payment_id=payment.id,
         settlement_status=payment.settlement_status,

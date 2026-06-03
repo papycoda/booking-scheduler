@@ -35,7 +35,14 @@ register_exception_handlers(app)
 
 allowed_origins = [str(settings.frontend_url).rstrip("/")]
 if settings.environment == "development":
-    allowed_origins.extend(["http://localhost:3000", "http://127.0.0.1:3000"])
+    allowed_origins.extend(
+        [
+            "http://localhost:3000",
+            "http://127.0.0.1:3000",
+            "http://localhost:3001",
+            "http://127.0.0.1:3001",
+        ]
+    )
 
 app.add_middleware(
     CORSMiddleware,

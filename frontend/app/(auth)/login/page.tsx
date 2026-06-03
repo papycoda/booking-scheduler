@@ -24,7 +24,8 @@ export default function LoginPage() {
         password: form.get("password"),
       });
       storeAccessToken(response.access_token);
-      window.location.href = "/dashboard";
+      const next = new URLSearchParams(window.location.search).get("next") || "/dashboard";
+      window.location.href = next;
     } catch (err) {
       setError(err instanceof Error ? err.message : "Unable to login");
       setIsSubmitting(false);

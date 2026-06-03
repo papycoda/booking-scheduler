@@ -96,6 +96,33 @@ async def create_transfer_recipient(
     return body["data"]
 
 
+async def list_banks(*, country: str = "nigeria") -> list[dict[str, Any]]:
+    headers = {"Authorization": f"Bearer {settings.paystack_secret_key}"}
+    async with httpx.AsyncClient(timeout=15) as client:
+        response = await client.get(f"https://api.paystack.co/bank?country={country}", headers=headers)
+    if response.status_code >= 400:
+        raise PaystackError("Paystack bank lookup failed.")
+    body = response.json()
+    if not body.get("status") or "data" not in body:
+        raise PaystackError("Paystack returned an unexpected bank lookup response.")
+    return body["data"]
+
+
+async def resolve_bank_code(bank_name_or_code: str) -> tuple[str, str]:
+    value = bank_name_or_code.strip()
+    if value.isdigit():
+        return value, value
+    normalized = value.lower()
+    for bank in await list_banks():
+        name = str(bank.get("name") or "")
+        code = str(bank.get("code") or "")
+        slug = str(bank.get("slug") or "")
+        aliases = {name.lower(), code.lower(), slug.lower()}
+        if normalized in aliases or normalized in name.lower():
+            return code, name
+    raise PaystackError("Bank was not found.")
+
+
 async def initiate_transfer(
     *,
     amount: int,

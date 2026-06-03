@@ -1,21 +1,11 @@
 "use client";
 
-import { FormEvent, useEffect, useState } from "react";
+import { FormEvent, useEffect, useMemo, useState } from "react";
 import { api, Service, Staff } from "../../../lib/api";
 import { DashboardShell } from "../../../components/DashboardShell";
 
 function initials(name: string) {
-  return name
-    .split(" ")
-    .map((part) => part[0])
-    .join("")
-    .slice(0, 2)
-    .toUpperCase();
-}
-
-function shortBio(bio?: string | null) {
-  if (!bio) return "Team member";
-  return bio.length > 44 ? `${bio.slice(0, 44)}...` : bio;
+  return name.split(" ").map((part) => part[0]).join("").slice(0, 2).toUpperCase();
 }
 
 export default function StaffPage() {
@@ -23,19 +13,23 @@ export default function StaffPage() {
   const [services, setServices] = useState<Service[]>([]);
   const [selectedStaffId, setSelectedStaffId] = useState("");
   const [serviceDrafts, setServiceDrafts] = useState<Record<string, string[]>>({});
+  const [savedDrafts, setSavedDrafts] = useState<Record<string, string[]>>({});
   const [error, setError] = useState("");
   const [message, setMessage] = useState("");
 
   async function load(preferredStaffId?: string) {
     try {
       const [staffRows, serviceRows] = await Promise.all([api.dashboardStaff(), api.dashboardServices()]);
+      const drafts = Object.fromEntries(staffRows.map((member) => [member.id, member.service_ids ?? []]));
       setStaff(staffRows);
       setServices(serviceRows);
-      setServiceDrafts(Object.fromEntries(staffRows.map((member) => [member.id, member.service_ids ?? []])));
-      const nextSelected = preferredStaffId && staffRows.some((member) => member.id === preferredStaffId)
-        ? preferredStaffId
-        : staffRows[0]?.id ?? "";
-      setSelectedStaffId(nextSelected);
+      setServiceDrafts(drafts);
+      setSavedDrafts(drafts);
+      setSelectedStaffId(
+        preferredStaffId && staffRows.some((member) => member.id === preferredStaffId)
+          ? preferredStaffId
+          : staffRows[0]?.id ?? "",
+      );
     } catch (err) {
       setError(err instanceof Error ? err.message : "Could not load staff");
     }
@@ -47,6 +41,14 @@ export default function StaffPage() {
 
   const selectedStaff = staff.find((member) => member.id === selectedStaffId) ?? staff[0];
   const selectedServices = selectedStaff ? serviceDrafts[selectedStaff.id] ?? [] : [];
+  const savedServices = selectedStaff ? savedDrafts[selectedStaff.id] ?? [] : [];
+  const isDirty = useMemo(() => {
+    const current = [...selectedServices].sort().join(",");
+    const saved = [...savedServices].sort().join(",");
+    return current !== saved;
+  }, [selectedServices, savedServices]);
+  const assignedServices = services.filter((service) => selectedServices.includes(service.id));
+  const availableServices = services.filter((service) => !selectedServices.includes(service.id));
 
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -68,19 +70,25 @@ export default function StaffPage() {
     setError("");
     setMessage("");
     await api.updateStaff(member.id, { is_bookable: !member.is_bookable });
-    setMessage(member.is_bookable ? "Bookings turned off" : "Bookings turned on");
+    setMessage(member.is_bookable ? "Booking turned off" : "Booking turned on");
     await load(member.id);
   }
 
-  function toggleService(staffId: string, serviceId: string) {
-    setServiceDrafts((current) => {
-      const selected = current[staffId] ?? [];
-      const next = selected.includes(serviceId) ? selected.filter((id) => id !== serviceId) : [...selected, serviceId];
-      return { ...current, [staffId]: next };
-    });
+  function addService(staffId: string, serviceId: string) {
+    setServiceDrafts((current) => ({
+      ...current,
+      [staffId]: Array.from(new Set([...(current[staffId] ?? []), serviceId])),
+    }));
   }
 
-  async function assignServices(staffId: string) {
+  function removeService(staffId: string, serviceId: string) {
+    setServiceDrafts((current) => ({
+      ...current,
+      [staffId]: (current[staffId] ?? []).filter((id) => id !== serviceId),
+    }));
+  }
+
+  async function saveServices(staffId: string) {
     setError("");
     setMessage("");
     await api.assignStaffServices(staffId, serviceDrafts[staffId] ?? []);
@@ -92,138 +100,145 @@ export default function StaffPage() {
     setError("");
     setMessage("");
     await api.deleteStaff(staffId);
-    setMessage("Staff removed from bookings");
+    setMessage("Staff removed from booking choices");
     await load();
   }
 
   return (
     <DashboardShell title="Staff">
-      <section className="dashboard-card overflow-hidden">
-        <div className="border-b border-line/70 bg-[#fcfdfe] p-6">
-          <p className="eyebrow">Team</p>
-          <h2 className="section-title mt-1">Staff and services</h2>
-          <p className="muted mt-1">Choose a staff member, then pick the services they can take.</p>
-        </div>
-
-        <div className="grid min-h-[640px] divide-y divide-line/70 lg:grid-cols-12 lg:divide-x lg:divide-y-0">
-          <aside className="grid gap-6 bg-[#fcfdfe]/60 p-5 lg:col-span-5">
-            <form onSubmit={submit} className="grid gap-3 rounded-2xl border border-line/70 bg-white p-4 shadow-sm">
-              <div>
-                <p className="text-xs font-bold uppercase tracking-wider text-ink/55">Add staff</p>
-              </div>
-              <input name="name" placeholder="Staff name" required />
-              <textarea name="bio" placeholder="Bio or specialty" rows={3} />
-              <button type="submit">Add staff</button>
-            </form>
-
-            <div className="grid content-start gap-3">
-              <p className="text-xs font-bold uppercase tracking-wider text-ink/55">Team list</p>
-              <div className="grid gap-2">
-                {staff.map((member) => {
-                  const isSelected = member.id === selectedStaff?.id;
-                  return (
-                    <button
-                      key={member.id}
-                      type="button"
-                      onClick={() => setSelectedStaffId(member.id)}
-                      className={[
-                        "flex min-h-0 items-center justify-between rounded-xl border p-3 text-left text-ink shadow-none transition hover:translate-y-0",
-                        isSelected ? "border-action/20 bg-[#e8efe9]/80" : "border-line/70 bg-white hover:bg-[#f8faf9]",
-                      ].join(" ")}
-                    >
-                      <span className="flex min-w-0 items-center gap-3">
-                        <span className={["grid h-10 w-10 shrink-0 place-items-center rounded-full text-xs font-bold", isSelected ? "bg-action text-white" : "border border-[#caa26b]/20 bg-[#caa26b]/10 text-[#9a7546]"].join(" ")}>
-                          {initials(member.name)}
-                        </span>
-                        <span className="min-w-0">
-                          <span className="block truncate text-sm font-bold">{member.name}</span>
-                          <span className="block truncate text-xs font-medium text-ink/55">{shortBio(member.bio)}</span>
-                        </span>
-                      </span>
-                      <span className="rounded-md bg-white px-2 py-1 text-[10px] font-bold uppercase tracking-wider text-ink/55">
-                        {member.is_bookable ? "On" : "Off"}
-                      </span>
-                    </button>
-                  );
-                })}
-                {staff.length === 0 && <p className="rounded-xl border border-line/70 bg-white p-4 text-sm text-ink/65">No staff yet.</p>}
-              </div>
+      <section className="grid gap-6 lg:grid-cols-[360px_1fr]">
+        <aside className="grid gap-6">
+          <form onSubmit={submit} className="bookie-card grid gap-3 p-5">
+            <div>
+              <h2 className="section-title">Add staff</h2>
+              <p className="bookie-subtitle mt-1">Add someone clients can book with.</p>
             </div>
-          </aside>
+            <label className="bookie-label">
+              Name
+              <input name="name" placeholder="Nora James" required />
+            </label>
+            <label className="bookie-label">
+              What they do
+              <textarea name="bio" placeholder="Lashes, brows, facials..." rows={3} />
+            </label>
+            <button type="submit">Add staff</button>
+          </form>
 
-          <section className="flex flex-col justify-between bg-white p-6 lg:col-span-7">
-            {selectedStaff ? (
-              <>
-                <div className="grid gap-6">
-                  <div className="flex flex-col justify-between gap-4 border-b border-line/70 pb-5 sm:flex-row sm:items-start">
-                    <div className="flex items-start gap-4">
-                      <div className="grid h-16 w-16 shrink-0 place-items-center rounded-full border border-action/10 bg-[#e8efe9] text-lg font-bold text-action shadow-inner">
-                        {initials(selectedStaff.name)}
-                      </div>
-                      <div>
-                        <h2 className="text-xl font-bold text-ink">{selectedStaff.name}</h2>
-                        {selectedStaff.bio && <p className="mt-1 max-w-md text-sm font-medium leading-relaxed text-ink/60">{selectedStaff.bio}</p>}
-                      </div>
-                    </div>
+          <section className="bookie-card p-5">
+            <h2 className="section-title">Team</h2>
+            <div className="mt-4 grid gap-2">
+              {staff.map((member) => {
+                const isSelected = selectedStaff?.id === member.id;
+                const count = serviceDrafts[member.id]?.length ?? 0;
+                return (
+                  <button
+                    key={member.id}
+                    type="button"
+                    onClick={() => setSelectedStaffId(member.id)}
+                    className={[
+                      "grid min-h-0 grid-cols-[auto_1fr_auto] items-center gap-3 rounded-2xl border p-3 text-left shadow-none hover:translate-y-0",
+                      isSelected ? "border-[#0e4731]/20 bg-[#e8efe9]" : "border-slate-100 bg-white hover:bg-[#f8faf9]",
+                    ].join(" ")}
+                  >
+                    <span className={isSelected ? "grid h-11 w-11 place-items-center rounded-full bg-[#0e4731] text-sm font-bold text-white" : "grid h-11 w-11 place-items-center rounded-full bg-[#e8efe9] text-sm font-bold text-[#0e4731]"}>
+                      {initials(member.name)}
+                    </span>
+                    <span className="min-w-0">
+                      <strong className="block truncate text-sm text-[#0f2119]">{member.name}</strong>
+                      <span className="bookie-help">{count} service{count === 1 ? "" : "s"}</span>
+                    </span>
+                    <span className="status-badge">{member.is_bookable ? "On" : "Off"}</span>
+                  </button>
+                );
+              })}
+              {staff.length === 0 && <p className="soft-empty">No staff yet. Add the first person above.</p>}
+            </div>
+          </section>
+        </aside>
 
-                    <button
-                      type="button"
-                      onClick={() => toggleBookable(selectedStaff)}
-                      className={selectedStaff.is_bookable ? "status-badge status-badge-success min-h-0 px-4 py-2" : "status-badge status-badge-muted min-h-0 px-4 py-2"}
-                    >
-                      {selectedStaff.is_bookable ? "Taking bookings" : "Not taking bookings"}
-                    </button>
-                  </div>
-
+        <section className="bookie-card p-5">
+          {selectedStaff ? (
+            <div className="grid gap-6">
+              <div className="flex flex-wrap items-start justify-between gap-4 border-b border-slate-100 pb-5">
+                <div className="flex items-start gap-4">
+                  <span className="grid h-16 w-16 place-items-center rounded-full bg-[#e8efe9] text-lg font-bold text-[#0e4731]">{initials(selectedStaff.name)}</span>
                   <div>
-                    <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
-                      <h3 className="text-xs font-bold uppercase tracking-wider text-ink/55">Services</h3>
-                      <span className="text-xs font-semibold text-ink/55">{selectedServices.length} selected</span>
-                    </div>
-                    <div className="grid gap-2.5 sm:grid-cols-2">
-                      {services.map((service) => {
-                        const isAssigned = selectedServices.includes(service.id);
-                        return (
-                          <label
-                            key={service.id}
-                            className={[
-                              "flex cursor-pointer items-center justify-between rounded-xl border p-3 transition",
-                              isAssigned ? "border-action/20 bg-[#e8efe9]/70" : "border-line/70 bg-white hover:bg-[#f8faf9]",
-                            ].join(" ")}
-                          >
-                            <span className={isAssigned ? "text-xs font-bold text-ink" : "text-xs font-semibold text-ink/60"}>{service.name}</span>
-                            <input
-                              type="checkbox"
-                              className="h-4 w-4 accent-[#0e4731]"
-                              checked={isAssigned}
-                              onChange={() => toggleService(selectedStaff.id, service.id)}
-                            />
-                          </label>
-                        );
-                      })}
-                    </div>
+                    <h1 className="text-2xl font-semibold tracking-normal text-[#0f2119]">{selectedStaff.name}</h1>
+                    <p className="bookie-subtitle mt-1 max-w-xl">{selectedStaff.bio || "No notes added yet."}</p>
                   </div>
                 </div>
+                <button
+                  type="button"
+                  onClick={() => toggleBookable(selectedStaff)}
+                  className={selectedStaff.is_bookable ? "secondary-button min-h-0 rounded-xl px-4 py-2 text-sm" : "min-h-0 rounded-xl px-4 py-2 text-sm"}
+                >
+                  {selectedStaff.is_bookable ? "Turn off booking" : "Turn on booking"}
+                </button>
+              </div>
 
-                <div className="mt-6 flex items-center justify-between border-t border-line/70 pt-5">
-                  <button type="button" onClick={() => deactivateStaff(selectedStaff.id)} className="danger-link min-h-0 rounded-xl px-4 py-2 text-xs">
-                    Remove from bookings
-                  </button>
-                  <button type="button" onClick={() => assignServices(selectedStaff.id)} className="min-h-0 rounded-xl px-6 py-2 text-xs">
+              <div className="grid gap-5 xl:grid-cols-2">
+                <section className="rounded-2xl border border-[#0e4731]/10 bg-[#e8efe9]/60 p-4">
+                  <div className="flex items-center justify-between gap-3">
+                    <h2 className="section-title">Assigned to this staff</h2>
+                    <span className="status-badge status-badge-success">{assignedServices.length}</span>
+                  </div>
+                  <div className="mt-4 grid gap-2">
+                    {assignedServices.map((service) => (
+                      <div key={service.id} className="grid gap-3 rounded-xl border border-white bg-white p-3 sm:grid-cols-[1fr_auto] sm:items-center">
+                        <div>
+                          <strong className="block text-sm text-[#0f2119]">{service.name}</strong>
+                          <span className="bookie-help">{service.duration_minutes} min</span>
+                        </div>
+                        <button className="secondary-button min-h-0 rounded-xl px-3 py-2 text-xs" type="button" onClick={() => removeService(selectedStaff.id, service.id)}>
+                          Remove
+                        </button>
+                      </div>
+                    ))}
+                    {assignedServices.length === 0 && <p className="soft-empty">This staff member has no services yet.</p>}
+                  </div>
+                </section>
+
+                <section className="rounded-2xl border border-slate-100 bg-white p-4">
+                  <div className="flex items-center justify-between gap-3">
+                    <h2 className="section-title">Available services</h2>
+                    <span className="status-badge">{availableServices.length}</span>
+                  </div>
+                  <div className="mt-4 grid gap-2">
+                    {availableServices.map((service) => (
+                      <div key={service.id} className="grid gap-3 rounded-xl border border-slate-100 bg-[#f8faf9] p-3 sm:grid-cols-[1fr_auto] sm:items-center">
+                        <div>
+                          <strong className="block text-sm text-[#0f2119]">{service.name}</strong>
+                          <span className="bookie-help">{service.duration_minutes} min</span>
+                        </div>
+                        <button className="secondary-button min-h-0 rounded-xl px-3 py-2 text-xs" type="button" onClick={() => addService(selectedStaff.id, service.id)}>
+                          Add
+                        </button>
+                      </div>
+                    ))}
+                    {availableServices.length === 0 && <p className="soft-empty">All services are assigned to this staff member.</p>}
+                  </div>
+                </section>
+              </div>
+
+              <div className="flex flex-wrap items-center justify-between gap-3 border-t border-slate-100 pt-5">
+                <button type="button" onClick={() => deactivateStaff(selectedStaff.id)} className="danger-link min-h-0 rounded-xl px-4 py-2 text-sm">
+                  Remove from bookings
+                </button>
+                <div className="flex items-center gap-3">
+                  {isDirty && <span className="text-sm font-semibold text-[#caa26b]">Unsaved changes</span>}
+                  <button type="button" onClick={() => saveServices(selectedStaff.id)} disabled={!isDirty} className="min-h-0 rounded-xl px-5 py-2 text-sm">
                     Save services
                   </button>
                 </div>
-              </>
-            ) : (
-              <div className="grid h-full place-items-center text-center">
-                <p className="muted">Add a staff member to assign services.</p>
               </div>
-            )}
-          </section>
-        </div>
+            </div>
+          ) : (
+            <p className="soft-empty">Add a staff member to choose their services.</p>
+          )}
+        </section>
       </section>
-      {message && <p className="text-sm text-action">{message}</p>}
-      {error && <p className="text-sm text-red-700">{error}</p>}
+      {message && <p className="rounded-xl border border-[#0e4731]/15 bg-[#e8efe9] px-4 py-3 text-sm font-semibold text-[#0e4731]">{message}</p>}
+      {error && <p className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm font-semibold text-red-700">{error}</p>}
     </DashboardShell>
   );
 }

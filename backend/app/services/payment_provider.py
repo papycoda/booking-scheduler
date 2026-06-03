@@ -5,6 +5,7 @@ from app.models.tenant import Tenant
 from app.services.paystack_service import initialize_transaction
 
 MAX_PLATFORM_FEE_PERCENT = Decimal("10.00")
+MAX_PLATFORM_FEE_AMOUNT = 500_000
 
 
 @dataclass(frozen=True)
@@ -24,7 +25,7 @@ def capped_platform_fee_percentage(tenant: Tenant) -> Decimal:
 
 
 def build_payment_plan(tenant: Tenant, amount: int) -> PaymentPlan:
-    platform_fee = int((Decimal(amount) * capped_platform_fee_percentage(tenant)) / Decimal("100"))
+    platform_fee = min(int((Decimal(amount) * capped_platform_fee_percentage(tenant)) / Decimal("100")), MAX_PLATFORM_FEE_AMOUNT)
     business_net = max(amount - platform_fee, 0)
     subaccount = getattr(tenant, "paystack_subaccount_code", None)
     if getattr(tenant, "payment_setup_status", None) == "split_ready" and subaccount:

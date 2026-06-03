@@ -1,7 +1,7 @@
 from decimal import Decimal
 from uuid import UUID
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 
 
 class TenantResponse(BaseModel):
@@ -16,6 +16,7 @@ class TenantResponse(BaseModel):
     paystack_subaccount_code: str | None = None
     paystack_business_name: str | None = None
     payout_bank_code: str | None = None
+    payout_bank_name: str | None = None
     payout_account_number: str | None = None
     payout_account_name: str | None = None
     payout_recipient_code: str | None = None
@@ -56,15 +57,23 @@ class PaystackOnboardingRequest(BaseModel):
 
 
 class PayoutSetupRequest(BaseModel):
-    bank_code: str = Field(min_length=2, max_length=20)
+    bank_code: str | None = Field(default=None, min_length=2, max_length=20)
+    bank_name: str | None = Field(default=None, min_length=2, max_length=100)
     account_number: str = Field(pattern=r"^[0-9]{10}$")
     account_name: str | None = Field(default=None, min_length=2, max_length=255)
+
+    @model_validator(mode="after")
+    def require_bank_identifier(self) -> "PayoutSetupRequest":
+        if not self.bank_code and not self.bank_name:
+            raise ValueError("bank_name is required")
+        return self
 
 
 class PaystackStatusResponse(BaseModel):
     paystack_subaccount_code: str | None = None
     paystack_business_name: str | None = None
     payout_bank_code: str | None = None
+    payout_bank_name: str | None = None
     payout_account_number: str | None = None
     payout_account_name: str | None = None
     payout_recipient_code: str | None = None

@@ -62,6 +62,7 @@ export type Tenant = {
   paystack_subaccount_code?: string | null;
   paystack_business_name?: string | null;
   payout_bank_code?: string | null;
+  payout_bank_name?: string | null;
   payout_account_number?: string | null;
   payout_account_name?: string | null;
   payout_recipient_code?: string | null;
@@ -159,6 +160,7 @@ export type PaymentSetupStatus = {
   paystack_subaccount_code?: string | null;
   paystack_business_name?: string | null;
   payout_bank_code?: string | null;
+  payout_bank_name?: string | null;
   payout_account_number?: string | null;
   payout_account_name?: string | null;
   payout_recipient_code?: string | null;
@@ -173,6 +175,19 @@ export type DashboardPayout = {
   settlement_status: string;
   payout_transfer_reference?: string | null;
   payout_transfer_code?: string | null;
+};
+
+export type DashboardPayoutDetail = DashboardPayout & {
+  booking_id: string;
+  client_name: string;
+  service_name: string;
+  amount: number;
+  platform_fee_amount: number;
+  business_net_amount: number;
+  payout_attempt_count: number;
+  payout_review_reason?: string | null;
+  last_payout_error?: string | null;
+  next_payout_attempt_at?: string | null;
 };
 
 export type AvailabilitySchedule = {
@@ -239,6 +254,54 @@ export function formatNgn(amount?: number | null) {
   }).format(koboToNgn(amount));
 }
 
+export function bookingStatusLabel(status?: string | null) {
+  const labels: Record<string, string> = {
+    confirmed: "Booked",
+    pending_payment: "Needs payment",
+    completed: "Done",
+    cancelled: "Cancelled",
+    no_show: "No show",
+    expired: "Expired",
+  };
+  return labels[status ?? ""] ?? "Booked";
+}
+
+export function paymentStatusLabel(status?: string | null) {
+  const labels: Record<string, string> = {
+    paid: "Deposit paid",
+    success: "Deposit paid",
+    pending: "Waiting for payment",
+    failed: "Payment failed",
+  };
+  return labels[status ?? ""] ?? "Waiting for payment";
+}
+
+export function payoutStatusLabel(status?: string | null) {
+  const labels: Record<string, string> = {
+    paid: "Payout sent",
+    pending: "Payout pending",
+    queued: "Payout pending",
+    processing: "Sending payout",
+    needs_review: "Needs review",
+    needs_setup: "Bank details needed",
+    failed: "Payout failed",
+    not_due: "Not ready yet",
+  };
+  return labels[status ?? ""] ?? "Not ready yet";
+}
+
+export function priceModeLabel(mode?: Service["pricing_mode"]) {
+  if (mode === "from") return "Starts from";
+  if (mode === "consultation") return "Quote after details";
+  return "Fixed price";
+}
+
+export function depositPolicyLabel(policy?: Service["deposit_policy"]) {
+  if (policy === "custom") return "Different deposit";
+  if (policy === "disabled") return "Full payment now";
+  return "Normal deposit";
+}
+
 export const api = {
   register: (body: unknown) => request<{ access_token: string; slug: string }>("/auth/register", { method: "POST", body: JSON.stringify(body) }),
   login: (body: unknown) => request<{ access_token: string }>("/auth/login", { method: "POST", body: JSON.stringify(body) }),
@@ -285,6 +348,11 @@ export const api = {
     request<DashboardBooking>(`/dashboard/bookings/${bookingId}`, { method: "PATCH", body: JSON.stringify(body), token }),
   initiateDashboardPayout: (paymentId: string, token = getAccessToken()) =>
     request<DashboardPayout>(`/dashboard/payments/${paymentId}/payout`, { method: "POST", token }),
+  dashboardPayouts: (token = getAccessToken()) => request<DashboardPayoutDetail[]>("/dashboard/payouts", { token }),
+  approveDashboardPayout: (paymentId: string, token = getAccessToken()) =>
+    request<DashboardPayout>(`/dashboard/payouts/${paymentId}/approve`, { method: "POST", token }),
+  retryDashboardPayout: (paymentId: string, token = getAccessToken()) =>
+    request<DashboardPayout>(`/dashboard/payouts/${paymentId}/retry`, { method: "POST", token }),
   currentTenant: (token = getAccessToken()) => request<Tenant>("/tenants/me", { token }),
   updateTenant: (body: unknown, token = getAccessToken()) => request<Tenant>("/tenants/me", { method: "PATCH", body: JSON.stringify(body), token }),
   paystackStatus: (token = getAccessToken()) =>

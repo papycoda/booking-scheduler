@@ -35,6 +35,8 @@ export default function OnboardingPage() {
   const [slugDraft, setSlugDraft] = useState("");
   const [publicOrigin, setPublicOrigin] = useState("");
   const [activeStep, setActiveStep] = useState("profile");
+  const [assignStaffId, setAssignStaffId] = useState("");
+  const [assignServiceIds, setAssignServiceIds] = useState<string[]>([]);
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
   const [isLoading, setIsLoading] = useState(true);
@@ -55,6 +57,8 @@ export default function OnboardingPage() {
         setStaff(staffRows);
         setSchedules(scheduleRows);
         setPaymentStatus(payment);
+        setAssignStaffId(staffRows[0]?.id ?? "");
+        setAssignServiceIds(staffRows[0]?.service_ids ?? []);
       })
       .catch((err) => setError(err instanceof Error ? err.message : "Could not load onboarding"))
       .finally(() => setIsLoading(false));
@@ -136,7 +140,9 @@ export default function OnboardingPage() {
         is_active: true,
       });
       setStaff((current) => [staffRow, ...current]);
-      setActiveStep("hours");
+      setAssignStaffId(staffRow.id);
+      setAssignServiceIds([]);
+      setActiveStep("assign");
       setMessage("Staff member added");
       event.currentTarget.reset();
     } catch (err) {
@@ -174,6 +180,22 @@ export default function OnboardingPage() {
     }
   }
 
+  async function saveAssignments(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!assignStaffId) return;
+    setError("");
+    setMessage("");
+    try {
+      await api.assignStaffServices(assignStaffId, assignServiceIds);
+      const updatedStaff = await api.dashboardStaff();
+      setStaff(updatedStaff);
+      setActiveStep("hours");
+      setMessage("Services assigned");
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Could not save services");
+    }
+  }
+
   async function savePayout(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setError("");
@@ -182,7 +204,7 @@ export default function OnboardingPage() {
     try {
       const status = await api.savePayoutSetup({
         account_name: form.get("account_name") || null,
-        bank_code: form.get("bank_code"),
+        bank_name: form.get("bank_name"),
         account_number: form.get("account_number"),
       });
       setPaymentStatus(status);
@@ -194,10 +216,12 @@ export default function OnboardingPage() {
   }
 
   const publicBookingUrl = `${publicOrigin}/book/${slugDraft || tenant?.slug || ""}`;
+  const hasServiceAssignments = staff.some((staffRow) => (staffRow.service_ids ?? []).length > 0);
   const completedSteps = [
     Boolean(tenant?.name && tenant?.slug),
     services.length > 0,
     staff.length > 0,
+    hasServiceAssignments,
     schedules.length > 0,
     Boolean(paymentStatus?.payout_ready),
   ].filter(Boolean).length;
@@ -243,15 +267,15 @@ export default function OnboardingPage() {
       <section className="dashboard-card grid gap-5 p-5 lg:grid-cols-[1fr_auto] lg:items-end">
         <div>
           <p className="eyebrow">Setup guide</p>
-          <h1 className="mt-2 text-3xl font-semibold tracking-normal text-ink">Launch a clean booking flow</h1>
-          <p className="muted mt-2 max-w-2xl">
-            Set the business link, add one bookable service, assign staff, open weekly hours, and add payout details when ready.
+            <h1 className="mt-2 text-3xl font-semibold tracking-normal text-ink">Get your booking link ready</h1>
+            <p className="muted mt-2 max-w-2xl">
+            Add the basics clients need: your link, services, staff, working hours, and where payouts should go.
           </p>
         </div>
         <div className="rounded-2xl border border-action/15 bg-action/5 p-4">
-          <p className="text-sm font-semibold text-action">{completedSteps} of 5 complete</p>
+          <p className="text-sm font-semibold text-action">{completedSteps} of 6 complete</p>
           <div className="mt-3 h-2 w-48 overflow-hidden rounded-full bg-white">
-            <div className="h-full rounded-full bg-action" style={{ width: `${(completedSteps / 5) * 100}%` }} />
+            <div className="h-full rounded-full bg-action" style={{ width: `${(completedSteps / 6) * 100}%` }} />
           </div>
         </div>
       </section>
@@ -264,9 +288,10 @@ export default function OnboardingPage() {
               ["profile", "Business profile"],
               ["service", "First service"],
               ["staff", "Staff"],
+              ["assign", "Services for staff"],
               ["hours", "Weekly hours"],
               ["payout", "Payouts"],
-              ["launch", "Launch"],
+              ["launch", "Test link"],
             ].map(([id, label]) => (
               <button
                 key={id}
@@ -290,7 +315,7 @@ export default function OnboardingPage() {
             <form onSubmit={saveProfile} className="dashboard-card grid gap-5 p-5 sm:grid-cols-2">
               <div className="sm:col-span-2">
                 <p className="eyebrow">Step 1</p>
-                <h2 className="section-title">Business profile and booking link</h2>
+                  <h2 className="section-title">Business details and booking link</h2>
               </div>
               <label className="grid gap-2 text-sm font-semibold text-ink/75">
                 Business name
@@ -316,15 +341,15 @@ export default function OnboardingPage() {
                 <input name="default_deposit_amount" type="number" min={0} step={1} defaultValue={koboToNgn(tenant?.default_deposit_amount)} />
               </label>
               <label className="grid gap-2 text-sm font-semibold text-ink/75">
-                Advance booking window
+                How far ahead clients can book
                 <input name="advance_booking_days" type="number" min={1} defaultValue={tenant?.advance_booking_days ?? 30} />
               </label>
               <label className="grid gap-2 text-sm font-semibold text-ink/75">
-                Minimum notice
+                Minimum notice before booking
                 <input name="min_notice_hours" type="number" min={0} defaultValue={tenant?.min_notice_hours ?? 2} />
               </label>
               <label className="grid gap-2 text-sm font-semibold text-ink/75">
-                Cancellation notice
+                Minimum notice before cancel
                 <input name="cancellation_notice_hours" type="number" min={0} defaultValue={tenant?.cancellation_notice_hours ?? 24} />
               </label>
               <label className="grid gap-2 text-sm font-semibold text-ink/75">
@@ -336,7 +361,7 @@ export default function OnboardingPage() {
                 <input name="address" defaultValue={tenant?.address ?? ""} placeholder="Business address" />
               </label>
               <label className="grid gap-2 text-sm font-semibold text-ink/75 sm:col-span-2">
-                Public description
+                What clients should know
                 <textarea name="description" defaultValue={tenant?.description ?? ""} placeholder="What clients should know before booking." />
               </label>
               <button type="submit" className="sm:col-span-2">Save and continue</button>
@@ -355,7 +380,7 @@ export default function OnboardingPage() {
                   <input name="name" placeholder="Braids consultation" required />
                 </label>
                 <label className="grid gap-2 text-sm font-semibold text-ink/75">
-                  Duration
+                  How long it takes
                   <input name="duration_minutes" type="number" min={5} step={5} defaultValue={60} required />
                 </label>
                 <label className="grid gap-2 text-sm font-semibold text-ink/75">
@@ -363,19 +388,19 @@ export default function OnboardingPage() {
                   <input name="price" type="number" min={0} step={1} defaultValue={25000} required />
                 </label>
                 <label className="grid gap-2 text-sm font-semibold text-ink/75">
-                  Pricing style
+                  How is this priced?
                   <select name="pricing_mode" defaultValue="fixed">
-                    <option value="fixed">Fixed</option>
-                    <option value="from">From / starts at</option>
-                    <option value="consultation">Consultation-based</option>
+                    <option value="fixed">Fixed price</option>
+                    <option value="from">Starts from</option>
+                    <option value="consultation">Quote after details</option>
                   </select>
                 </label>
                 <label className="grid gap-2 text-sm font-semibold text-ink/75">
-                  Deposit rule
+                  What should clients pay now?
                   <select name="deposit_policy" defaultValue="tenant_default">
-                    <option value="tenant_default">Use business default</option>
-                    <option value="custom">Custom for this service</option>
-                    <option value="disabled">No deposit</option>
+                    <option value="tenant_default">Use my normal deposit</option>
+                    <option value="custom">Set a different deposit</option>
+                    <option value="disabled">Take full payment now</option>
                   </select>
                 </label>
                 <label className="grid gap-2 text-sm font-semibold text-ink/75">
@@ -383,8 +408,8 @@ export default function OnboardingPage() {
                   <input name="deposit_amount" type="number" min={0} step={1} placeholder="Only needed for custom" />
                 </label>
                 <label className="grid gap-2 text-sm font-semibold text-ink/75 sm:col-span-2">
-                  Description
-                  <textarea name="description" placeholder="What is included, what clients should bring, or how pricing works." />
+                  What clients should know
+                  <textarea name="description" placeholder="What is included, what clients should bring, or when final price is confirmed." />
                 </label>
                 <button type="submit" className="sm:col-span-2">Add service</button>
               </form>
@@ -425,7 +450,7 @@ export default function OnboardingPage() {
                   {staff.map((staffRow) => (
                     <div key={staffRow.id} className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-line/70 bg-field/50 p-3">
                       <span className="font-semibold text-ink">{staffRow.name}</span>
-                      <span className="status-badge status-badge-success">Bookable</span>
+                      <span className="status-badge status-badge-success">On</span>
                     </div>
                   ))}
                 </div>
@@ -433,12 +458,57 @@ export default function OnboardingPage() {
             </section>
           )}
 
+          {activeStep === "assign" && (
+            <form onSubmit={saveAssignments} className="dashboard-card grid gap-5 p-5">
+              <div>
+                <p className="eyebrow">Step 4</p>
+                <h2 className="section-title">Choose what each staff member can take</h2>
+                <p className="muted mt-1">This controls who appears when a client picks a service.</p>
+              </div>
+              <label className="grid gap-2 text-sm font-semibold text-ink/75">
+                Staff
+                <select
+                  value={assignStaffId}
+                  onChange={(event) => {
+                    const nextStaffId = event.target.value;
+                    setAssignStaffId(nextStaffId);
+                    setAssignServiceIds(staff.find((staffRow) => staffRow.id === nextStaffId)?.service_ids ?? []);
+                  }}
+                >
+                  {staff.map((staffRow) => <option key={staffRow.id} value={staffRow.id}>{staffRow.name}</option>)}
+                </select>
+              </label>
+              <div className="grid gap-2 sm:grid-cols-2">
+                {services.map((service) => {
+                  const isSelected = assignServiceIds.includes(service.id);
+                  return (
+                    <label key={service.id} className="flex cursor-pointer items-center justify-between rounded-xl border border-line/70 bg-field/50 p-3 text-sm font-semibold text-ink/75">
+                      {service.name}
+                      <input
+                        className="h-4 min-h-0 w-4 accent-[#0e4731]"
+                        type="checkbox"
+                        checked={isSelected}
+                        onChange={() => {
+                          setAssignServiceIds((current) => isSelected ? current.filter((id) => id !== service.id) : [...current, service.id]);
+                        }}
+                      />
+                    </label>
+                  );
+                })}
+              </div>
+              <div className="flex flex-wrap gap-3">
+                <button type="submit">Save services</button>
+                <button type="button" className="secondary-button" onClick={() => setActiveStep("hours")}>Skip for now</button>
+              </div>
+            </form>
+          )}
+
           {activeStep === "hours" && (
             <section className="grid gap-4">
               <form onSubmit={createWeeklyHours} className="dashboard-card grid gap-5 p-5">
                 <div>
-                  <p className="eyebrow">Step 4</p>
-                  <h2 className="section-title">Open weekly booking hours</h2>
+                  <p className="eyebrow">Step 5</p>
+                  <h2 className="section-title">Set weekly working hours</h2>
                 </div>
                 <div className="grid gap-4 sm:grid-cols-3">
                   <label className="grid gap-2 text-sm font-semibold text-ink/75">
@@ -472,12 +542,12 @@ export default function OnboardingPage() {
                     ))}
                   </div>
                 </fieldset>
-                <button type="submit">Add weekly hours</button>
+                <button type="submit">Save hours</button>
               </form>
               {schedules.length > 0 && (
                 <div className="dashboard-card grid gap-3 p-5">
                   <p className="eyebrow">Current weekly hours</p>
-                  <p className="muted">{schedules.length} schedule block{schedules.length === 1 ? "" : "s"} saved.</p>
+                  <p className="muted">{schedules.length} working hour{schedules.length === 1 ? "" : "s"} saved.</p>
                 </div>
               )}
             </section>
@@ -486,24 +556,24 @@ export default function OnboardingPage() {
           {activeStep === "payout" && (
             <form onSubmit={savePayout} className="dashboard-card grid gap-5 p-5 sm:grid-cols-3">
               <div className="sm:col-span-3">
-                <p className="eyebrow">Step 5</p>
-                <h2 className="section-title">Add payout details</h2>
-                <p className="muted mt-1">Clients can pay deposits before this is complete. Add bank details when you are ready to receive settlements.</p>
+                <p className="eyebrow">Step 6</p>
+                <h2 className="section-title">Add payout account</h2>
+                <p className="muted mt-1">Clients can pay deposits before this is complete. Add bank details when you are ready to receive payouts.</p>
               </div>
               <label className="grid gap-2 text-sm font-semibold text-ink/75">
                 Account name
                 <input name="account_name" defaultValue={tenant?.payout_account_name ?? tenant?.name ?? ""} />
               </label>
               <label className="grid gap-2 text-sm font-semibold text-ink/75">
-                Bank code
-                <input name="bank_code" defaultValue={tenant?.payout_bank_code ?? ""} placeholder="Example: 058" required />
+                Bank name
+                <input name="bank_name" defaultValue={tenant?.payout_bank_name ?? tenant?.payout_bank_code ?? ""} placeholder="GTBank, Access Bank, Zenith..." required />
               </label>
               <label className="grid gap-2 text-sm font-semibold text-ink/75">
                 Account number
                 <input name="account_number" defaultValue={tenant?.payout_account_number ?? ""} placeholder="10-digit account number" required />
               </label>
               <div className="flex flex-wrap gap-3 sm:col-span-3">
-                <button type="submit">Save payout details</button>
+                <button type="submit">Save payout account</button>
                 <button type="button" className="secondary-button" onClick={() => setActiveStep("launch")}>
                   Skip for now
                 </button>
@@ -516,7 +586,7 @@ export default function OnboardingPage() {
               <div>
                 <p className="eyebrow">Launch</p>
                 <h2 className="section-title">Your booking flow is ready to test</h2>
-                <p className="muted mt-1">Open the public link, choose a service and slot, then confirm the client-facing flow feels right.</p>
+                <p className="muted mt-1">Open the public link, choose a service and time, then check the client experience.</p>
               </div>
               <div className="grid gap-3 rounded-2xl border border-line/70 bg-field/60 p-4">
                 <span className="text-sm font-semibold text-ink">Public booking link</span>

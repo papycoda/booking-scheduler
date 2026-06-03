@@ -28,13 +28,20 @@ class Client(UUIDPrimaryKeyMixin, Base):
 class Booking(UUIDPrimaryKeyMixin, Base):
     __tablename__ = "bookings"
     __table_args__ = (
-        CheckConstraint("status IN ('pending_payment', 'confirmed', 'completed', 'cancelled', 'no_show')", name="ck_bookings_status"),
+        CheckConstraint("status IN ('pending_payment', 'confirmed', 'completed', 'cancelled', 'no_show', 'expired')", name="ck_bookings_status"),
         CheckConstraint("cancelled_by IS NULL OR cancelled_by IN ('client', 'business')", name="ck_bookings_cancelled_by"),
         CheckConstraint("price_status IN ('fixed', 'pending_quote', 'quoted')", name="ck_bookings_price_status"),
         CheckConstraint("deposit_amount >= 0", name="ck_bookings_deposit_amount_nonnegative"),
         CheckConstraint("quoted_price IS NULL OR quoted_price >= 0", name="ck_bookings_quoted_price_nonnegative"),
         CheckConstraint("end_time > start_time", name="valid_booking_time"),
-        UniqueConstraint("tenant_id", "staff_id", "start_time", name="unique_staff_slot"),
+        Index(
+            "unique_active_staff_slot",
+            "tenant_id",
+            "staff_id",
+            "start_time",
+            unique=True,
+            postgresql_where=text("status IN ('pending_payment', 'confirmed')"),
+        ),
         Index("idx_bookings_tenant_id", "tenant_id"),
         Index("idx_bookings_staff_id", "staff_id"),
         Index("idx_bookings_client_id", "client_id"),

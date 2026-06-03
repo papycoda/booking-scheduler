@@ -4,13 +4,13 @@ import { useEffect, useState } from "react";
 import { api } from "../../../../lib/api";
 
 export default function VerifyPage({ params, searchParams }: { params: { slug: string }; searchParams: { booking_id?: string; token?: string } }) {
-  const [message, setMessage] = useState("Checking payment");
+  const [message, setMessage] = useState("Waiting for payment");
   const [state, setState] = useState<"checking" | "confirmed" | "pending">("checking");
   const [manageUrl, setManageUrl] = useState("");
 
   useEffect(() => {
     if (!searchParams.booking_id) {
-      setMessage("Payment pending");
+      setMessage("Payment still pending");
       setState("pending");
       return;
     }
@@ -20,12 +20,12 @@ export default function VerifyPage({ params, searchParams }: { params: { slug: s
       const status = await api.bookingStatus(params.slug, searchParams.booking_id!, searchParams.token);
       if (status.manage_url) setManageUrl(status.manage_url);
       if (status.booking_status === "confirmed") {
-        setMessage("Booking confirmed");
+        setMessage("Deposit paid");
         setState("confirmed");
         window.clearInterval(timer);
       }
       if (attempts >= 20) {
-        setMessage("Payment pending");
+        setMessage("Payment still pending");
         setState("pending");
         window.clearInterval(timer);
       }
@@ -34,7 +34,7 @@ export default function VerifyPage({ params, searchParams }: { params: { slug: s
   }, [params.slug, searchParams.booking_id, searchParams.token]);
 
   return (
-    <main className="grid min-h-screen place-items-center bg-gradient-to-br from-[#c8d6cd] via-[#f3f6f4] to-[#dde5e0] px-5 py-10 text-ink">
+    <main className="grid min-h-screen place-items-center bg-[#f5f8f6] px-5 py-10 text-ink">
       <section className="public-glass grid w-full max-w-md justify-items-center gap-5 p-8 text-center">
         <div className="grid h-20 w-20 place-items-center rounded-full bg-white shadow-sm">
           {state === "confirmed" ? (
@@ -46,10 +46,10 @@ export default function VerifyPage({ params, searchParams }: { params: { slug: s
           )}
         </div>
         <div>
-          <p className="eyebrow mx-auto">Payment status</p>
+          <p className="eyebrow mx-auto">Payment</p>
           <h1 className="mt-2 text-3xl font-bold tracking-normal">{message}</h1>
           <p className="mt-3 text-sm font-medium leading-relaxed text-ink/65">
-            {state === "confirmed" ? "Your booking is confirmed. Keep your manage link so you can request changes if needed." : "This page updates automatically after checkout confirms the transaction."}
+            {state === "confirmed" ? "Your booking is confirmed. Keep this link so you can move or cancel the booking later." : "You can leave this page open while checkout finishes."}
           </p>
         </div>
         {manageUrl && (

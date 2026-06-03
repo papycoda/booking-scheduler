@@ -49,10 +49,12 @@ class TenantRouterTests(unittest.IsolatedAsyncioTestCase):
     def setUp(self) -> None:
         self.original_create_subaccount = tenant_router.create_subaccount
         self.original_create_transfer_recipient = tenant_router.create_transfer_recipient
+        self.original_resolve_bank_code = tenant_router.resolve_bank_code
 
     def tearDown(self) -> None:
         tenant_router.create_subaccount = self.original_create_subaccount
         tenant_router.create_transfer_recipient = self.original_create_transfer_recipient
+        tenant_router.resolve_bank_code = self.original_resolve_bank_code
 
     async def test_update_current_tenant_allows_available_custom_slug(self):
         tenant = SimpleNamespace(
@@ -195,3 +197,77 @@ class TenantRouterTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(tenant.payment_setup_status, "bank_added")
         self.assertTrue(response.payments_enabled)
         self.assertTrue(response.payout_ready)
+
+    async def test_save_payout_setup_accepts_bank_name_and_stores_provider_code(self):
+        tenant = SimpleNamespace(
+            id=uuid4(),
+            payout_bank_code=None,
+            payout_bank_name=None,
+            payout_account_number=None,
+            payout_account_name=None,
+            payout_recipient_code=None,
+            payment_setup_status="not_started",
+        )
+        captured = {}
+
+        async def resolve_bank_code(bank_name):
+            self.assertEqual(bank_name, "GTBank")
+            return ("058", "GTBank")
+
+        async def create_transfer_recipient(**kwargs):
+            captured.update(kwargs)
+            return {"recipient_code": "RCP_test"}
+
+        tenant_router.resolve_bank_code = resolve_bank_code
+        tenant_router.create_transfer_recipient = create_transfer_recipient
+
+        response = await tenant_router.save_payout_setup(
+            PayoutSetupRequest(
+                bank_name="GTBank",
+                account_number="0123456789",
+                account_name="Ada Hair Ltd",
+            ),
+            SimpleNamespace(tenant_id=tenant.id),
+            FakeTenantSession(tenant),
+        )
+
+        self.assertEqual(captured["bank_code"], "058")
+        self.assertEqual(tenant.payout_bank_code, "058")
+        self.assertEqual(tenant.payout_bank_name, "GTBank")
+        self.assertEqual(response.payout_bank_name, "GTBank")
+        self.assertTrue(response.payout_ready)
+
+    async def test_save_payout_setup_failure_saves_details_but_blocks_payouts(self):
+        tenant = SimpleNamespace(
+            id=uuid4(),
+            payout_bank_code=None,
+            payout_bank_name=None,
+            payout_account_number=None,
+            payout_account_name=None,
+            payout_recipient_code=None,
+            payment_setup_status="not_started",
+        )
+
+        async def resolve_bank_code(_bank_name):
+            return ("058", "GTBank")
+
+        async def create_transfer_recipient(**_kwargs):
+            raise PaystackError("failed")
+
+        tenant_router.resolve_bank_code = resolve_bank_code
+        tenant_router.create_transfer_recipient = create_transfer_recipient
+
+        response = await tenant_router.save_payout_setup(
+            PayoutSetupRequest(
+                bank_name="GTBank",
+                account_number="0123456789",
+                account_name="Ada Hair Ltd",
+            ),
+            SimpleNamespace(tenant_id=tenant.id),
+            FakeTenantSession(tenant),
+        )
+
+        self.assertEqual(tenant.payout_bank_name, "GTBank")
+        self.assertIsNone(tenant.payout_recipient_code)
+        self.assertEqual(tenant.payment_setup_status, "not_started")
+        self.assertFalse(response.payout_ready)

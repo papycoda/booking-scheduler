@@ -28,6 +28,7 @@ class Tenant(UUIDPrimaryKeyMixin, Base):
     paystack_subaccount_code: Mapped[str | None] = mapped_column(String(100))
     paystack_business_name: Mapped[str | None] = mapped_column(String(255))
     payout_bank_code: Mapped[str | None] = mapped_column(String(20))
+    payout_bank_name: Mapped[str | None] = mapped_column(String(100))
     payout_account_number: Mapped[str | None] = mapped_column(String(20))
     payout_account_name: Mapped[str | None] = mapped_column(String(255))
     payout_recipient_code: Mapped[str | None] = mapped_column(String(100))

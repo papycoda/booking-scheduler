@@ -65,6 +65,23 @@ class DashboardPayoutResponse(BaseModel):
     payout_transfer_code: str | None = None
 
 
+class DashboardPayoutDetailResponse(BaseModel):
+    payment_id: UUID
+    booking_id: UUID
+    client_name: str
+    service_name: str
+    amount: int
+    platform_fee_amount: int
+    business_net_amount: int
+    settlement_status: str
+    payout_attempt_count: int = 0
+    payout_review_reason: str | None = None
+    last_payout_error: str | None = None
+    next_payout_attempt_at: datetime | None = None
+    payout_transfer_reference: str | None = None
+    payout_transfer_code: str | None = None
+
+
 class AnalyticsOverviewResponse(BaseModel):
     from_date: date
     to_date: date

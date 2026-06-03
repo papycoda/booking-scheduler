@@ -2,7 +2,7 @@ import uuid
 from datetime import datetime
 from typing import Any
 
-from sqlalchemy import CheckConstraint, DateTime, ForeignKey, Index, Integer, String, text
+from sqlalchemy import CheckConstraint, DateTime, ForeignKey, Index, Integer, String, Text, text
 from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -13,11 +13,11 @@ from app.models.mixins import UUIDPrimaryKeyMixin
 class Payment(UUIDPrimaryKeyMixin, Base):
     __tablename__ = "payments"
     __table_args__ = (
-        CheckConstraint("status IN ('pending', 'success', 'failed', 'refunded')", name="ck_payments_status"),
+        CheckConstraint("status IN ('pending', 'success', 'failed', 'refunded', 'expired')", name="ck_payments_status"),
         CheckConstraint("payment_type IN ('deposit', 'full')", name="ck_payments_payment_type"),
         CheckConstraint("provider IN ('paystack')", name="ck_payments_provider"),
         CheckConstraint("collection_mode IN ('platform_collected', 'direct_split')", name="ck_payments_collection_mode"),
-        CheckConstraint("settlement_status IN ('not_due', 'pending', 'paid', 'failed')", name="ck_payments_settlement_status"),
+        CheckConstraint("settlement_status IN ('not_due', 'needs_setup', 'needs_review', 'queued', 'processing', 'pending', 'paid', 'failed')", name="ck_payments_settlement_status"),
         CheckConstraint("platform_fee_amount >= 0", name="ck_payments_platform_fee_nonnegative"),
         CheckConstraint("business_net_amount >= 0", name="ck_payments_business_net_nonnegative"),
         Index("idx_payments_booking_id", "booking_id"),
@@ -39,6 +39,11 @@ class Payment(UUIDPrimaryKeyMixin, Base):
     settlement_status: Mapped[str] = mapped_column(String(20), nullable=False, server_default="not_due")
     payout_transfer_reference: Mapped[str | None] = mapped_column(String(100))
     payout_transfer_code: Mapped[str | None] = mapped_column(String(100))
+    payout_attempt_count: Mapped[int] = mapped_column(Integer, nullable=False, server_default="0")
+    last_payout_attempt_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    next_payout_attempt_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    last_payout_error: Mapped[str | None] = mapped_column(Text)
+    payout_review_reason: Mapped[str | None] = mapped_column(String(100))
     paid_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     metadata_: Mapped[dict[str, Any]] = mapped_column("metadata", JSONB, server_default=text("'{}'::jsonb"))
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, server_default=text("NOW()"))

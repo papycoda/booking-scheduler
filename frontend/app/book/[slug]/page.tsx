@@ -158,7 +158,7 @@ export default function PublicBookingPage({ params }: { params: { slug: string }
   }
 
   return (
-    <main className="relative flex min-h-screen justify-center overflow-hidden bg-gradient-to-br from-[#c8d6cd] via-[#f3f6f4] to-[#dde5e0] px-4 py-6 text-ink md:px-12 md:py-12">
+    <main className="relative flex min-h-screen justify-center overflow-hidden bg-[#f5f8f6] px-4 py-6 text-ink md:px-12 md:py-12">
       <div className="pointer-events-none absolute bottom-0 left-0 z-0 h-[500px] w-96 opacity-40">
         <PlantLeft />
       </div>
@@ -176,20 +176,20 @@ export default function PublicBookingPage({ params }: { params: { slug: string }
             </span>
             <h1 className="mt-4 font-serif text-4xl font-normal tracking-normal text-ink">{tenant?.name ?? "Book Appointment"}</h1>
             <p className="mt-3 text-[13px] font-medium leading-relaxed text-ink/70">
-              {tenant?.description || "Choose a service, pick an available time, and pay the deposit now. Card and bank transfer options may be available at checkout."}
+              {tenant?.description || "Choose a service, pick a time, pay the deposit, and upload inspo if your look needs a quote."}
             </p>
             <div className="mt-8 space-y-3 border-t border-ink/5 pt-6">
               <p className="flex items-center gap-3 text-xs font-semibold text-[#3d5245]">
                 <svg className="h-4 w-4 text-[#caa26b]" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24" aria-hidden="true">
                   <path strokeLinecap="round" strokeLinejoin="round" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
                 </svg>
-                Secure checkout integration
+                Secure payment
               </p>
               <p className="flex items-center gap-3 text-xs font-semibold text-[#3d5245]">
                 <svg className="h-4 w-4 text-[#caa26b]" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24" aria-hidden="true">
                   <path strokeLinecap="round" strokeLinejoin="round" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
                 </svg>
-                Instant booking confirmation
+                Booking confirmed after payment
               </p>
               {tenant?.address && <p className="text-xs font-semibold text-[#3d5245]">{tenant.address}</p>}
               {tenant?.phone && <p className="text-xs font-semibold text-[#3d5245]">{tenant.phone}</p>}
@@ -258,12 +258,12 @@ export default function PublicBookingPage({ params }: { params: { slug: string }
                 {slot && <p className="text-xs font-semibold text-action">Selected: {new Date(slot).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}</p>}
               </div>
               {slotsLoading && <p className="muted">Loading times...</p>}
-              {!slotsLoading && !serviceId && <p className="muted">Choose a service to see bookable times.</p>}
-              {!slotsLoading && serviceId && !date && <p className="muted">Choose a date to load available times.</p>}
+              {!slotsLoading && !serviceId && <p className="muted">Choose a service to see open times.</p>}
+              {!slotsLoading && serviceId && !date && <p className="muted">Choose a date to see open times.</p>}
               {!slotsLoading && serviceId && date && dateValidationError && <p className="muted">{dateValidationError}</p>}
               {!slotsLoading && serviceId && date && !dateValidationError && slots.length === 0 && (
                 <p className="muted">
-                  {selectedStaff ? `No times for ${selectedStaff.name} on this date. Try another staff member or date.` : "No times available for this date. Try another date."}
+                  {selectedStaff ? `No times for ${selectedStaff.name} on this date. Try another staff member or date.` : "No open times on this date. Try another date."}
                 </p>
               )}
               <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
@@ -297,7 +297,7 @@ export default function PublicBookingPage({ params }: { params: { slug: string }
                       <path strokeLinecap="round" strokeLinejoin="round" d="M2.25 15.75l5.159-5.159a2.25 2.25 0 013.182 0l5.159 5.159m-1.5-1.5 1.409-1.409a2.25 2.25 0 013.182 0l2.909 2.909M3.75 19.5h16.5a1.5 1.5 0 001.5-1.5V6a1.5 1.5 0 00-1.5-1.5H3.75A1.5 1.5 0 002.25 6v12a1.5 1.5 0 001.5 1.5z" />
                     </svg>
                   </span>
-                  <p className="text-xs font-bold text-ink">{inspoImages?.length ? `${inspoImages.length} image${inspoImages.length === 1 ? "" : "s"} selected` : "Click to upload reference or style images"}</p>
+                  <p className="text-xs font-bold text-ink">{inspoImages?.length ? `${inspoImages.length} image${inspoImages.length === 1 ? "" : "s"} selected` : "Upload inspo or reference images"}</p>
                   <p className="mt-1 text-[10px] font-medium text-ink/55">PNG or JPG images only</p>
                 </div>
                 <input className="hidden" name="inspo_images" type="file" accept="image/*" multiple onChange={(event) => setInspoImages(event.target.files)} />
@@ -309,7 +309,7 @@ export default function PublicBookingPage({ params }: { params: { slug: string }
 
           {error && <p className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm font-medium text-red-700">{error}</p>}
           <button type="submit" disabled={!canSubmit} className="flex w-full items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-[#0e4731] to-[#17573d] text-sm font-semibold text-white shadow-lg shadow-action/10">
-            <span>{submitLoading ? "Preparing payment..." : "Continue to payment"}</span>
+            <span>{submitLoading ? "Getting payment ready..." : "Continue to payment"}</span>
             <svg className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="2.2" viewBox="0 0 24 24" aria-hidden="true">
               <path strokeLinecap="round" strokeLinejoin="round" d="M13.5 4.5L21 12m0 0l-7.5 7.5M21 12H3" />
             </svg>

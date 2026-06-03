@@ -28,6 +28,18 @@ class PaymentProviderTests(unittest.TestCase):
         self.assertEqual(plan.business_net_amount, 18_000)
         self.assertEqual(plan.transaction_charge, 0)
 
+    def test_platform_fee_is_ten_percent_capped_at_five_thousand_naira(self):
+        tenant = SimpleNamespace(
+            payment_setup_status="not_started",
+            paystack_subaccount_code=None,
+            platform_fee_percentage=30,
+        )
+
+        plan = build_payment_plan(tenant, 10_000_000)
+
+        self.assertEqual(plan.platform_fee_amount, 500_000)
+        self.assertEqual(plan.business_net_amount, 9_500_000)
+
     def test_split_ready_uses_subaccount_and_platform_fee_as_transaction_charge(self):
         tenant = SimpleNamespace(
             payment_setup_status="split_ready",

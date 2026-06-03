@@ -103,11 +103,23 @@ class PaystackWebhookTests(unittest.TestCase):
 
     def test_charge_success_updates_payment_booking_and_queues_notification(self):
         booking_id = uuid4()
-        payment = SimpleNamespace(id=uuid4(), booking_id=booking_id, status="pending", metadata_=None, paid_at=None)
+        payment = SimpleNamespace(
+            id=uuid4(),
+            booking_id=booking_id,
+            tenant_id=uuid4(),
+            paystack_reference="bk_reference",
+            status="pending",
+            amount=5_000,
+            currency="NGN",
+            collection_mode="platform_collected",
+            settlement_status="not_due",
+            metadata_=None,
+            paid_at=None,
+        )
         booking = SimpleNamespace(id=booking_id, status="pending_payment")
         session = FakeWebhookSession(payment, booking)
         webhooks.SessionLocal = lambda: FakeSessionFactory(session)
-        event = {"event": "charge.success", "data": {"reference": "bk_reference"}}
+        event = {"event": "charge.success", "data": {"reference": "bk_reference", "amount": 5_000, "currency": "NGN"}}
         body = json.dumps(event).encode("utf-8")
         signature = hmac.new(settings.paystack_secret_key.encode("utf-8"), body, hashlib.sha512).hexdigest()
         background_tasks = BackgroundTasks()
@@ -125,5 +137,41 @@ class PaystackWebhookTests(unittest.TestCase):
         self.assertEqual(payment.status, "success")
         self.assertEqual(payment.metadata_, event)
         self.assertIsNotNone(payment.paid_at)
+        self.assertEqual(payment.settlement_status, "needs_setup")
         self.assertEqual(booking.status, "confirmed")
         self.assertEqual(len(background_tasks.tasks), 1)
+
+    def test_charge_success_with_mismatched_amount_is_ignored_without_confirming(self):
+        booking_id = uuid4()
+        payment = SimpleNamespace(
+            id=uuid4(),
+            booking_id=booking_id,
+            tenant_id=uuid4(),
+            paystack_reference="bk_reference",
+            status="pending",
+            amount=5_000,
+            currency="NGN",
+            collection_mode="platform_collected",
+            settlement_status="not_due",
+            metadata_=None,
+            paid_at=None,
+        )
+        booking = SimpleNamespace(id=booking_id, status="pending_payment")
+        session = FakeWebhookSession(payment, booking)
+        webhooks.SessionLocal = lambda: FakeSessionFactory(session)
+        event = {"event": "charge.success", "data": {"reference": "bk_reference", "amount": 4_000, "currency": "NGN"}}
+        body = json.dumps(event).encode("utf-8")
+        signature = hmac.new(settings.paystack_secret_key.encode("utf-8"), body, hashlib.sha512).hexdigest()
+
+        response = __import__("asyncio").run(
+            webhooks.paystack_webhook(
+                FakeRequest(body, event),
+                BackgroundTasks(),
+                x_paystack_signature=signature,
+            )
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertFalse(session.committed)
+        self.assertEqual(payment.status, "pending")
+        self.assertEqual(booking.status, "pending_payment")

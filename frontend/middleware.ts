@@ -13,10 +13,6 @@ export function middleware(request: NextRequest) {
     return NextResponse.redirect(loginUrl);
   }
 
-  if ((pathname === "/login" || pathname === "/register") && hasSession) {
-    return NextResponse.redirect(new URL("/dashboard", request.url));
-  }
-
   return NextResponse.next();
 }
 
