@@ -1,11 +1,16 @@
 from dataclasses import dataclass
 from decimal import Decimal
+import hashlib
+import hmac
+from urllib.parse import urlencode
 
+from app.config import settings
 from app.models.tenant import Tenant
 from app.services.paystack_service import initialize_transaction
 
 MAX_PLATFORM_FEE_PERCENT = Decimal("10.00")
 MAX_PLATFORM_FEE_AMOUNT = 500_000
+DEMO_ACCESS_CODE_PREFIX = "demo_access_"
 
 
 @dataclass(frozen=True)
@@ -17,6 +22,39 @@ class PaymentPlan:
     subaccount: str | None
     transaction_charge: int
     bearer: str | None
+
+
+def _demo_transaction_response(reference: str, callback_url: str, metadata: dict[str, str]) -> dict:
+    """Returns mock Paystack transaction response for demo mode."""
+    query = urlencode({"reference": reference, "token": signed_demo_payment_token(reference)})
+    return {
+        "authorization_url": f"{str(settings.frontend_url).rstrip('/')}/demo/pay?{query}",
+        "access_code": f"{DEMO_ACCESS_CODE_PREFIX}{reference[:8]}",
+        "reference": reference,
+        "metadata": metadata,
+    }
+
+
+def signed_demo_payment_token(reference: str) -> str:
+    return hmac.new(
+        settings.secret_key.encode("utf-8"),
+        f"demo-payment:{reference}".encode("utf-8"),
+        hashlib.sha256,
+    ).hexdigest()
+
+
+def verify_demo_payment_token(reference: str, token: str | None) -> bool:
+    if not reference or not token:
+        return False
+    return hmac.compare_digest(token, signed_demo_payment_token(reference))
+
+
+def is_demo_admin(email: str) -> bool:
+    """Check if the given email is authorized for demo mode payments."""
+    if not settings.demo_mode or not settings.demo_admin_emails:
+        return False
+    normalized_email = email.strip().lower()
+    return normalized_email in settings.demo_admin_emails_list
 
 
 def capped_platform_fee_percentage(tenant: Tenant) -> Decimal:
@@ -59,6 +97,19 @@ async def initialize_checkout_payment(
     metadata: dict[str, str],
 ) -> tuple[dict, PaymentPlan]:
     plan = build_payment_plan(tenant, amount)
+
+    # Demo mode is only available to authorized admin emails
+    if settings.demo_mode and is_demo_admin(email):
+        extended_metadata = {
+            **metadata,
+            "provider": plan.provider,
+            "collection_mode": plan.collection_mode,
+            "platform_fee_amount": str(plan.platform_fee_amount),
+            "business_net_amount": str(plan.business_net_amount),
+        }
+        data = _demo_transaction_response(reference, callback_url, extended_metadata)
+        return data, plan
+
     data = await initialize_transaction(
         email=email,
         amount=amount,

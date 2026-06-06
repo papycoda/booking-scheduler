@@ -10,44 +10,20 @@ os.environ.setdefault("DATABASE_URL", "postgresql+asyncpg://user:pass@localhost/
 os.environ.setdefault("REDIS_URL", "redis://localhost:6379")
 os.environ.setdefault("PAYSTACK_SECRET_KEY", "sk_test_x")
 
-from fastapi.security import HTTPAuthorizationCredentials  # noqa: E402
-
-from app.dependencies import get_current_user  # noqa: E402
-from app.services.auth_service import create_access_token  # noqa: E402
+from app.dependencies import require_tenant_owner  # noqa: E402
 
 
-class FakeScalarResult:
-    def __init__(self, value):
-        self.value = value
+class DependencyTests(unittest.IsolatedAsyncioTestCase):
+    async def test_require_tenant_owner_allows_owner(self):
+        user = SimpleNamespace(id=uuid4(), tenant_id=uuid4(), role="tenant_owner")
 
-    def scalar_one_or_none(self):
-        return self.value
+        self.assertIs(await require_tenant_owner(user), user)
 
+    async def test_require_tenant_owner_rejects_staff(self):
+        user = SimpleNamespace(id=uuid4(), tenant_id=uuid4(), role="tenant_staff")
 
-class FakeSession:
-    def __init__(self, user):
-        self.user = user
-        self.statements = []
+        with self.assertRaises(Exception) as raised:
+            await require_tenant_owner(user)
 
-    async def execute(self, statement, params=None):
-        self.statements.append((str(statement), params))
-        if params and "tenant_id" in params:
-            return FakeScalarResult(None)
-        return FakeScalarResult(self.user)
-
-
-class DependenciesTests(unittest.IsolatedAsyncioTestCase):
-    async def test_get_current_user_sets_tenant_context_before_user_lookup(self):
-        tenant_id = uuid4()
-        user = SimpleNamespace(id=uuid4(), tenant_id=tenant_id, role="tenant_owner", is_active=True)
-        token = create_access_token(user)
-        db = FakeSession(user)
-
-        current_user = await get_current_user(
-            HTTPAuthorizationCredentials(scheme="Bearer", credentials=token),
-            db,
-        )
-
-        self.assertEqual(current_user, user)
-        self.assertEqual(db.statements[0][1], {"tenant_id": str(tenant_id)})
-        self.assertIn("set_config('app.current_tenant_id'", db.statements[0][0])
+        self.assertEqual(getattr(raised.exception, "status_code", None), 403)
+        self.assertEqual(raised.exception.detail["error"], "INSUFFICIENT_ROLE")

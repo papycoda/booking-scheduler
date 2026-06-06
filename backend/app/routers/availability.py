@@ -7,7 +7,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database import get_db
-from app.dependencies import get_current_user
+from app.dependencies import get_current_user, require_tenant_owner
 from app.models.availability import AvailabilityOverride, AvailabilitySchedule
 from app.models.staff import Staff
 from app.models.user import User
@@ -47,7 +47,7 @@ async def list_schedules(
 @router.post("/schedules", response_model=AvailabilityScheduleResponse, status_code=status.HTTP_201_CREATED)
 async def create_schedule(
     payload: AvailabilityScheduleCreateRequest,
-    current_user: Annotated[User, Depends(get_current_user)],
+    current_user: Annotated[User, Depends(require_tenant_owner)],
     db: Annotated[AsyncSession, Depends(get_db)],
 ) -> AvailabilitySchedule:
     await validate_staff_belongs_to_tenant(db, current_user.tenant_id, payload.staff_id)
@@ -62,7 +62,7 @@ async def create_schedule(
 async def update_schedule(
     schedule_id: UUID,
     payload: AvailabilityScheduleUpdateRequest,
-    current_user: Annotated[User, Depends(get_current_user)],
+    current_user: Annotated[User, Depends(require_tenant_owner)],
     db: Annotated[AsyncSession, Depends(get_db)],
 ) -> AvailabilitySchedule:
     result = await db.execute(select(AvailabilitySchedule).where(AvailabilitySchedule.tenant_id == current_user.tenant_id, AvailabilitySchedule.id == schedule_id))
@@ -88,7 +88,7 @@ async def update_schedule(
 @router.delete("/schedules/{schedule_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def delete_schedule(
     schedule_id: UUID,
-    current_user: Annotated[User, Depends(get_current_user)],
+    current_user: Annotated[User, Depends(require_tenant_owner)],
     db: Annotated[AsyncSession, Depends(get_db)],
 ) -> None:
     result = await db.execute(select(AvailabilitySchedule).where(AvailabilitySchedule.tenant_id == current_user.tenant_id, AvailabilitySchedule.id == schedule_id))
@@ -118,7 +118,7 @@ async def list_overrides(
 @router.post("/overrides", response_model=AvailabilityOverrideResponse, status_code=status.HTTP_201_CREATED)
 async def create_override(
     payload: AvailabilityOverrideCreateRequest,
-    current_user: Annotated[User, Depends(get_current_user)],
+    current_user: Annotated[User, Depends(require_tenant_owner)],
     db: Annotated[AsyncSession, Depends(get_db)],
 ) -> AvailabilityOverride:
     await validate_staff_belongs_to_tenant(db, current_user.tenant_id, payload.staff_id)
@@ -132,7 +132,7 @@ async def create_override(
 @router.delete("/overrides/{override_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def delete_override(
     override_id: UUID,
-    current_user: Annotated[User, Depends(get_current_user)],
+    current_user: Annotated[User, Depends(require_tenant_owner)],
     db: Annotated[AsyncSession, Depends(get_db)],
 ) -> None:
     result = await db.execute(select(AvailabilityOverride).where(AvailabilityOverride.tenant_id == current_user.tenant_id, AvailabilityOverride.id == override_id))

@@ -6,7 +6,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database import get_db
-from app.dependencies import get_current_user
+from app.dependencies import get_current_user, require_tenant_owner
 from app.models.service import Service
 from app.models.user import User
 from app.schemas.service import ServiceCreateRequest, ServiceResponse, ServiceUpdateRequest
@@ -39,7 +39,7 @@ async def list_services(
 @router.post("", response_model=ServiceResponse, status_code=status.HTTP_201_CREATED)
 async def create_service(
     payload: ServiceCreateRequest,
-    current_user: Annotated[User, Depends(get_current_user)],
+    current_user: Annotated[User, Depends(require_tenant_owner)],
     db: Annotated[AsyncSession, Depends(get_db)],
 ) -> Service:
     service = Service(tenant_id=current_user.tenant_id, **payload.model_dump())
@@ -53,7 +53,7 @@ async def create_service(
 async def update_service(
     service_id: UUID,
     payload: ServiceUpdateRequest,
-    current_user: Annotated[User, Depends(get_current_user)],
+    current_user: Annotated[User, Depends(require_tenant_owner)],
     db: Annotated[AsyncSession, Depends(get_db)],
 ) -> Service:
     service = await get_tenant_service(db, current_user.tenant_id, service_id)
@@ -67,7 +67,7 @@ async def update_service(
 @router.delete("/{service_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def delete_service(
     service_id: UUID,
-    current_user: Annotated[User, Depends(get_current_user)],
+    current_user: Annotated[User, Depends(require_tenant_owner)],
     db: Annotated[AsyncSession, Depends(get_db)],
 ) -> None:
     service = await get_tenant_service(db, current_user.tenant_id, service_id)

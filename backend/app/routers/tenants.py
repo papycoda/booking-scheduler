@@ -5,7 +5,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database import get_db
-from app.dependencies import get_current_user
+from app.dependencies import get_current_user, require_tenant_owner
 from app.models.tenant import Tenant
 from app.models.user import User
 from app.schemas.tenant import PayoutSetupRequest, PaystackOnboardingRequest, PaystackStatusResponse, TenantResponse, TenantUpdateRequest
@@ -37,7 +37,7 @@ async def read_current_tenant(
 @router.patch("/me", response_model=TenantResponse)
 async def update_current_tenant(
     payload: TenantUpdateRequest,
-    current_user: Annotated[User, Depends(get_current_user)],
+    current_user: Annotated[User, Depends(require_tenant_owner)],
     db: Annotated[AsyncSession, Depends(get_db)],
 ) -> Tenant:
     tenant = await get_current_tenant(db, current_user)
@@ -62,7 +62,7 @@ async def update_current_tenant(
 @router.post("/me/paystack", response_model=PaystackStatusResponse)
 async def onboard_paystack(
     payload: PaystackOnboardingRequest,
-    current_user: Annotated[User, Depends(get_current_user)],
+    current_user: Annotated[User, Depends(require_tenant_owner)],
     db: Annotated[AsyncSession, Depends(get_db)],
 ) -> PaystackStatusResponse:
     tenant = await get_current_tenant(db, current_user)
@@ -93,7 +93,7 @@ async def onboard_paystack(
 @router.post("/me/payout-setup", response_model=PaystackStatusResponse)
 async def save_payout_setup(
     payload: PayoutSetupRequest,
-    current_user: Annotated[User, Depends(get_current_user)],
+    current_user: Annotated[User, Depends(require_tenant_owner)],
     db: Annotated[AsyncSession, Depends(get_db)],
 ) -> PaystackStatusResponse:
     tenant = await get_current_tenant(db, current_user)

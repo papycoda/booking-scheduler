@@ -1,5 +1,6 @@
 import os
 import unittest
+from datetime import UTC, datetime, timedelta
 from types import SimpleNamespace
 from uuid import uuid4
 
@@ -11,6 +12,7 @@ os.environ.setdefault("REDIS_URL", "redis://localhost:6379")
 os.environ.setdefault("PAYSTACK_SECRET_KEY", "sk_test_x")
 
 from app.routers import public as public_router  # noqa: E402
+from app.services.booking_management_service import hash_manage_token  # noqa: E402
 
 
 class FakeResult:
@@ -26,6 +28,11 @@ class FakeResult:
 
     def all(self):
         return self.rows
+
+    def one_or_none(self):
+        if not self.rows:
+            return None
+        return self.rows[0]
 
 
 class FakeSession:
@@ -121,3 +128,106 @@ class PublicRouterTests(unittest.IsolatedAsyncioTestCase):
 
         self.assertEqual(response.body, b"image-bytes")
         self.assertEqual(response.media_type, "image/jpeg")
+        self.assertEqual(response.headers["X-Content-Type-Options"], "nosniff")
+
+    async def test_public_booking_status_without_token_returns_minimal_state(self):
+        tenant = SimpleNamespace(id=uuid4())
+        booking = SimpleNamespace(
+            id=uuid4(),
+            status="confirmed",
+            start_time=datetime.now(UTC),
+            end_time=datetime.now(UTC) + timedelta(hours=1),
+            deposit_amount=5_000,
+            price_status="fixed",
+            quoted_price=None,
+            manage_token_hash=hash_manage_token("valid-token"),
+        )
+        payment = SimpleNamespace(status="success", paystack_reference="bk_secret")
+        service = SimpleNamespace(name="Private Service")
+        staff = SimpleNamespace(name="Private Staff")
+
+        async def get_public_tenant(_db, _slug):
+            return tenant
+
+        public_router.get_public_tenant = get_public_tenant
+
+        response = await public_router.public_booking_status.__wrapped__(
+            SimpleNamespace(),
+            "tenant-slug",
+            booking.id,
+            FakeSession([FakeResult(rows=[(booking, payment, service, staff)])]),
+        )
+
+        self.assertEqual(response.booking_status, "confirmed")
+        self.assertEqual(response.payment_status, "success")
+        self.assertIsNone(response.reference)
+        self.assertIsNone(response.start_time)
+        self.assertIsNone(response.service_name)
+        self.assertIsNone(response.manage_url)
+
+    async def test_public_booking_status_with_invalid_token_returns_minimal_state(self):
+        tenant = SimpleNamespace(id=uuid4())
+        booking = SimpleNamespace(
+            id=uuid4(),
+            status="pending_payment",
+            start_time=datetime.now(UTC),
+            end_time=datetime.now(UTC) + timedelta(hours=1),
+            deposit_amount=5_000,
+            price_status="fixed",
+            quoted_price=None,
+            manage_token_hash=hash_manage_token("valid-token"),
+        )
+        payment = SimpleNamespace(status="pending", paystack_reference="bk_secret")
+
+        async def get_public_tenant(_db, _slug):
+            return tenant
+
+        public_router.get_public_tenant = get_public_tenant
+
+        response = await public_router.public_booking_status.__wrapped__(
+            SimpleNamespace(),
+            "tenant-slug",
+            booking.id,
+            FakeSession([FakeResult(rows=[(booking, payment, SimpleNamespace(name="Service"), SimpleNamespace(name="Staff"))])]),
+            token="wrong-token",
+        )
+
+        self.assertEqual(response.booking_status, "pending_payment")
+        self.assertIsNone(response.reference)
+        self.assertIsNone(response.deposit_amount)
+        self.assertIsNone(response.manage_url)
+
+    async def test_public_booking_status_with_valid_token_returns_full_details(self):
+        tenant = SimpleNamespace(id=uuid4())
+        booking = SimpleNamespace(
+            id=uuid4(),
+            status="confirmed",
+            start_time=datetime.now(UTC),
+            end_time=datetime.now(UTC) + timedelta(hours=1),
+            deposit_amount=5_000,
+            price_status="fixed",
+            quoted_price=None,
+            manage_token_hash=hash_manage_token("valid-token"),
+        )
+        payment = SimpleNamespace(status="success", paystack_reference="bk_secret")
+        service = SimpleNamespace(name="Braids")
+        staff = SimpleNamespace(name="Ada")
+
+        async def get_public_tenant(_db, _slug):
+            return tenant
+
+        public_router.get_public_tenant = get_public_tenant
+
+        response = await public_router.public_booking_status.__wrapped__(
+            SimpleNamespace(),
+            "tenant-slug",
+            booking.id,
+            FakeSession([FakeResult(rows=[(booking, payment, service, staff)])]),
+            token="valid-token",
+        )
+
+        self.assertEqual(response.reference, "bk_secret")
+        self.assertEqual(response.service_name, "Braids")
+        self.assertEqual(response.staff_name, "Ada")
+        self.assertEqual(response.deposit_amount, 5_000)
+        self.assertIn("token=valid-token", response.manage_url)

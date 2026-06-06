@@ -19,6 +19,7 @@ from fastapi.testclient import TestClient  # noqa: E402
 from app.config import settings  # noqa: E402
 from app.main import app  # noqa: E402
 from app.routers import webhooks  # noqa: E402
+from app.services.payment_provider import signed_demo_payment_token  # noqa: E402
 
 
 class FakeRequest:
@@ -58,6 +59,23 @@ class FakeWebhookSession:
         self.committed = True
 
 
+class FakeDemoSession:
+    def __init__(self, payment=None, booking=None):
+        self.payment = payment
+        self.booking = booking
+        self.committed = False
+        self.execute_count = 0
+
+    async def execute(self, _stmt):
+        self.execute_count += 1
+        if self.execute_count == 1:
+            return FakeScalarResult(self.payment)
+        return FakeScalarResult(self.booking)
+
+    async def commit(self):
+        self.committed = True
+
+
 class FakeSessionFactory:
     def __init__(self, session):
         self.session = session
@@ -72,9 +90,11 @@ class FakeSessionFactory:
 class PaystackWebhookTests(unittest.TestCase):
     def setUp(self):
         self.original_session_local = webhooks.SessionLocal
+        self.original_demo_mode = settings.demo_mode
 
     def tearDown(self):
         webhooks.SessionLocal = self.original_session_local
+        settings.demo_mode = self.original_demo_mode
 
     def test_invalid_signature_returns_400_before_processing(self):
         with TestClient(app) as client:
@@ -400,3 +420,119 @@ class PaystackWebhookTests(unittest.TestCase):
         self.assertEqual(payment.status, "pending")
         self.assertEqual(booking.status, "expired")
         self.assertEqual(len(background_tasks.tasks), 0)
+
+    def test_demo_complete_payment_requires_token(self):
+        settings.demo_mode = True
+
+        response = __import__("asyncio").run(
+            webhooks.demo_complete_payment("bk_reference", BackgroundTasks())
+        )
+
+        self.assertEqual(response.status_code, 403)
+        self.assertEqual(json.loads(response.body.decode())["status"], "invalid_demo_token")
+
+    def test_demo_complete_payment_rejects_invalid_token(self):
+        settings.demo_mode = True
+
+        response = __import__("asyncio").run(
+            webhooks.demo_complete_payment("bk_reference", BackgroundTasks(), token="bad-token")
+        )
+
+        self.assertEqual(response.status_code, 403)
+        self.assertEqual(json.loads(response.body.decode())["status"], "invalid_demo_token")
+
+    def test_demo_complete_payment_returns_404_for_unknown_reference(self):
+        settings.demo_mode = True
+        webhooks.SessionLocal = lambda: FakeSessionFactory(FakeDemoSession())
+
+        response = __import__("asyncio").run(
+            webhooks.demo_complete_payment(
+                "bk_reference",
+                BackgroundTasks(),
+                token=signed_demo_payment_token("bk_reference"),
+            )
+        )
+
+        self.assertEqual(response.status_code, 404)
+        self.assertEqual(json.loads(response.body.decode())["status"], "payment_not_found")
+
+    def test_demo_complete_payment_rejects_non_demo_payment_access_code(self):
+        settings.demo_mode = True
+        payment = SimpleNamespace(
+            id=uuid4(),
+            booking_id=uuid4(),
+            paystack_reference="bk_reference",
+            paystack_access_code="real_access_code",
+            status="pending",
+        )
+        webhooks.SessionLocal = lambda: FakeSessionFactory(FakeDemoSession(payment=payment))
+
+        response = __import__("asyncio").run(
+            webhooks.demo_complete_payment(
+                "bk_reference",
+                BackgroundTasks(),
+                token=signed_demo_payment_token("bk_reference"),
+            )
+        )
+
+        self.assertEqual(response.status_code, 403)
+        self.assertEqual(json.loads(response.body.decode())["status"], "not_demo_payment")
+
+    def test_demo_complete_payment_returns_already_paid_without_mutating(self):
+        settings.demo_mode = True
+        payment = SimpleNamespace(
+            id=uuid4(),
+            booking_id=uuid4(),
+            paystack_reference="bk_reference",
+            paystack_access_code="demo_access_bk_refer",
+            status="success",
+        )
+        session = FakeDemoSession(payment=payment)
+        webhooks.SessionLocal = lambda: FakeSessionFactory(session)
+
+        response = __import__("asyncio").run(
+            webhooks.demo_complete_payment(
+                "bk_reference",
+                BackgroundTasks(),
+                token=signed_demo_payment_token("bk_reference"),
+            )
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(json.loads(response.body.decode())["status"], "already_paid")
+        self.assertFalse(session.committed)
+
+    def test_demo_complete_payment_with_valid_token_confirms_demo_payment(self):
+        settings.demo_mode = True
+        booking_id = uuid4()
+        payment = SimpleNamespace(
+            id=uuid4(),
+            booking_id=booking_id,
+            tenant_id=uuid4(),
+            paystack_reference="bk_reference",
+            paystack_access_code="demo_access_bk_refer",
+            status="pending",
+            collection_mode="direct_split",
+            metadata_=None,
+            paid_at=None,
+        )
+        booking = SimpleNamespace(id=booking_id, status="pending_payment")
+        session = FakeDemoSession(payment=payment, booking=booking)
+        webhooks.SessionLocal = lambda: FakeSessionFactory(session)
+        background_tasks = BackgroundTasks()
+
+        response = __import__("asyncio").run(
+            webhooks.demo_complete_payment(
+                "bk_reference",
+                background_tasks,
+                token=signed_demo_payment_token("bk_reference"),
+            )
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertTrue(session.committed)
+        self.assertEqual(payment.status, "success")
+        self.assertEqual(payment.metadata_, {"event": "charge.success", "demo": True})
+        self.assertIsNotNone(payment.paid_at)
+        self.assertEqual(booking.status, "confirmed")
+        self.assertEqual(len(background_tasks.tasks), 1)

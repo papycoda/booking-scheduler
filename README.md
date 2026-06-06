@@ -1,516 +1,453 @@
-# Booking Scheduler
+# Bookie - Appointment Booking Made Simple
 
-Production-ready multi-tenant appointment booking SaaS.
+**Bookie** is a booking and payment system for Nigerian small businesses. If you run a salon, barbershop, spa, consulting service, or any business that takes appointments, Bookie helps you:
 
-Current status: Phase 1 backend foundation.
+- Accept bookings online 24/7
+- Let customers choose services and time slots
+- Collect payments securely via Paystack
+- Receive money directly to your bank account
+- Manage everything from one simple dashboard
 
+---
 
-You are working on the Bookie repo:
+## What You'll Need
 
-https://github.com/papycoda/booking-scheduler
+Before you start, make sure you have:
 
-Bookie is a multi-tenant booking and payments SaaS for Nigerian small businesses. The latest commit added automated payouts, retry logic, payout account setup, webhook verification, unpaid booking expiry, and fee caps.
+**For your computer (Manual Setup):**
+- **Python 3.12 or newer** — [Download here](https://www.python.org/downloads/)
+- **Node.js 20 or newer** — [Download here](https://nodejs.org/)
+- **Git** — [Download here](https://git-scm.com/downloads)
+- A code editor (like [VS Code](https://code.visualstudio.com/))
 
-Your task is to fix the QA/security issues found in the second-pass audit.
+**For Docker-backed local services (Recommended):**
+- **Docker Desktop** — [Download here](https://www.docker.com/products/docker-desktop/)
+- Docker starts PostgreSQL and Redis. Run the backend and frontend from your local Python and Node installs.
 
-Do not add unrelated features. Do not redesign unrelated pages. Focus only on payout safety, webhook correctness, payout review rules, account masking, and the related tests.
+**For the app to work:**
+- **Paystack account** — [Sign up free](https://paystack.co/) (for collecting payments)
+- (Optional) **Resend account** — [Sign up free](https://resend.com/) (for email notifications)
+- (Optional) **Meta WhatsApp Business account** — [Learn more](https://developers.facebook.com/docs/whatsapp/) (for WhatsApp notifications)
 
-## Current high-risk areas
+> **Using Docker?** Skip manual PostgreSQL and Redis setup. Docker handles those services only.
+- **Paystack account** — [Sign up free](https://paystack.co/) (for collecting payments)
+- (Optional) **Resend account** — [Sign up free](https://resend.com/) (for email notifications)
+- (Optional) **Meta WhatsApp Business account** — [Learn more](https://developers.facebook.com/docs/whatsapp/) (for WhatsApp notifications)
 
-The latest commit is:
+---
 
-`c12b4771b50a676afacd37c6732a392cc6f9febc`
+## Quick Start (5-Minute Setup)
 
-Commit message:
+### Step 1: Get the Code
 
-`feat: add automated payout system`
-
-The risky files are likely:
-
-* `backend/app/services/settlement_service.py`
-* `backend/app/routers/bookings.py`
-* `backend/app/routers/webhooks.py`
-* `backend/app/services/payment_lifecycle_service.py`
-* `backend/app/routers/tenants.py`
-* `backend/app/schemas/tenant.py`
-* `backend/app/schemas/dashboard.py`
-* `frontend/app/dashboard/settings/page.tsx`
-* `frontend/lib/api.ts`
-* related tests under `backend/tests/`
-
-## Fix 1 — Correct payout retry logic
-
-Product rule:
-
-A payout should have:
-
-* Initial payout attempt
-* 3 automatic retries after temporary provider/network failure
-* Then move to manual review
-
-The current implementation likely moves to review too early because `payout_attempt_count` is incremented before checking retry limits.
-
-Fix the logic so the actual behavior is:
-
-1. First attempt fails → schedule retry 1 after 5 minutes
-2. Retry 1 fails → schedule retry 2 after 30 minutes
-3. Retry 2 fails → schedule retry 3 after 2 hours
-4. Retry 3 fails → set `settlement_status = "needs_review"` and `payout_review_reason = "retry_limit_reached"`
-
-Use clear constants so the code is not ambiguous.
-
-Recommended naming:
-
-```python
-PAYOUT_RETRY_DELAYS = (
-    timedelta(minutes=5),
-    timedelta(minutes=30),
-    timedelta(hours=2),
-)
-MAX_PAYOUT_ATTEMPTS = 1 + len(PAYOUT_RETRY_DELAYS)
-```
-
-`payout_attempt_count` should mean total attempts, including the initial attempt.
-
-After a failed attempt:
-
-* If `payout_attempt_count < MAX_PAYOUT_ATTEMPTS`, set `settlement_status = "failed"` and schedule `next_payout_attempt_at` using the correct retry delay.
-* If `payout_attempt_count >= MAX_PAYOUT_ATTEMPTS`, set `settlement_status = "needs_review"`, clear `next_payout_attempt_at`, and set `payout_review_reason = "retry_limit_reached"`.
-
-Add tests for all four failure stages.
-
-Required tests:
-
-* first failure schedules 5-minute retry
-* second failure schedules 30-minute retry
-* third failure schedules 2-hour retry
-* fourth failure moves to `needs_review`
-* successful payout clears `last_payout_error`, clears `payout_review_reason`, stores provider transfer code, and sets status to `paid`
-
-## Fix 2 — Prevent tenant owners from approving review-required payouts
-
-Current problem:
-
-The dashboard exposes tenant-facing endpoints like:
-
-* `POST /dashboard/payouts/{payment_id}/approve`
-* `POST /dashboard/payouts/{payment_id}/retry`
-
-If tenant owners can approve a payout marked `needs_review`, then first-payout review and risky-payout review are meaningless.
-
-Product rule:
-
-Tenant/business users must NOT approve review-required payouts.
-
-Tenant users can:
-
-* view their payout status
-* see that a payout is under review
-* retry a payout only when it is safe and allowed
-* update payout bank details
-
-Tenant users must NOT:
-
-* approve first payout review
-* approve risky payout review
-* bypass `needs_review`
-
-Implementation requirements:
-
-1. Remove or restrict tenant-facing `approve` endpoint.
-2. If an endpoint remains, it must require a platform/admin role, not `tenant_owner`.
-3. Tenant-facing retry should only work for retryable failed payouts.
-4. Retry must NOT work when `settlement_status == "needs_review"`.
-5. Add structured error responses.
-
-Expected behavior:
-
-* If tenant owner calls approve endpoint, return `403 FORBIDDEN`.
-* If tenant owner tries to retry a payout in `needs_review`, return `409 CONFLICT` with:
-
-```json
-{
-  "error": "PAYOUT_REVIEW_REQUIRED",
-  "message": "This payout needs manual review before it can be sent."
-}
-```
-
-Add tests for:
-
-* tenant owner cannot approve first payout
-* tenant owner cannot retry `needs_review` payout
-* tenant owner can see payout status
-* platform admin can approve if platform-admin support already exists
-* if platform-admin support does not exist yet, leave a clear TODO and make the tenant-facing approval impossible for now
-
-Do not invent a fake admin dashboard if one does not exist. Just protect the backend correctly.
-
-## Fix 3 — Prevent expired bookings from being resurrected by late Paystack webhooks
-
-Current problem:
-
-Unpaid bookings expire after 15 minutes. The scheduler sets:
-
-* `booking.status = "expired"`
-* `payment.status = "expired"`
-
-But if Paystack later sends a `charge.success` webhook, the webhook can set:
-
-* `payment.status = "success"`
-* `booking.status = "confirmed"`
-
-That resurrects an expired booking and can create double-booking risk.
-
-Fix:
-
-In `backend/app/routers/webhooks.py`, before confirming payment and booking, explicitly reject expired records.
-
-Expected logic:
-
-```python
-if payment.status == "expired" or booking.status == "expired":
-    logger.warning(...)
-    return JSONResponse(status_code=200, content={"status": "ignored_expired"})
-```
-
-Do not return 4xx or 5xx to Paystack. Always return 200 for validly signed webhooks, even when ignored.
-
-Important:
-
-* Still verify signature first.
-* Still verify reference, amount, and currency.
-* Do not confirm expired bookings.
-* Do not queue payouts for expired payments.
-* Do not send confirmation notifications for expired bookings.
-
-Add tests for:
-
-* expired payment + valid webhook remains expired
-* expired booking + valid webhook remains expired
-* expired booking does not send confirmation notification
-* expired booking does not queue payout
-* valid pending payment still confirms normally
-
-## Fix 4 — Add row-level locking / concurrency safety for automated payout processing
-
-Current problem:
-
-`process_due_payouts` selects due payouts and loops over them. If multiple workers run, two workers can pick the same payout.
-
-Fix:
-
-Use database-level locking when selecting due payouts.
-
-Implementation requirements:
-
-1. Select due payout rows using `FOR UPDATE SKIP LOCKED`.
-2. Only select payments with:
-
-   * `status == "success"`
-   * `collection_mode == "platform_collected"`
-   * `settlement_status IN ("queued", "failed")`
-   * `next_payout_attempt_at IS NULL OR next_payout_attempt_at <= now`
-3. Mark each selected payout as `processing` before calling Paystack.
-4. Avoid double transfer attempts from multiple workers.
-5. Keep idempotent provider references.
-
-Recommended approach:
-
-* In `process_due_payouts`, use:
-
-```python
-select(Payment)
-.where(...)
-.order_by(Payment.created_at)
-.limit(limit)
-.with_for_update(skip_locked=True)
-```
-
-* Be careful with transaction boundaries.
-* Do not hold locks while doing a slow external HTTP call if avoidable.
-* A safer pattern is:
-
-  1. lock due rows
-  2. mark selected rows as `processing`
-  3. commit
-  4. call Paystack for each selected payout by ID
-  5. update result
-
-If this requires a small refactor, do it cleanly.
-
-Add tests for:
-
-* due payout selection uses lock/skip locked where practical
-* processing status is not selected again
-* already paid payout is not processed again
-* failed payout with future `next_payout_attempt_at` is not processed
-* failed payout with due `next_payout_attempt_at` is processed
-
-## Fix 5 — Mask payout account numbers in frontend and API responses
-
-Current issue:
-
-The API and frontend expose full payout account number and internal provider codes.
-
-Product rule:
-
-Users should see:
-
-* account name
-* bank name
-* masked account number, e.g. `******2734`
-
-Users should NOT see:
-
-* full account number after save
-* `paystack_subaccount_code`
-* `payout_recipient_code`
-* other provider/internal routing codes
-
-Backend changes:
-
-1. Update tenant/payment status response schemas so dashboard responses expose:
-
-   * `payout_account_name`
-   * `payout_bank_name`
-   * `masked_payout_account_number`
-   * `payment_setup_status`
-   * `payments_enabled`
-   * `payout_ready`
-   * `onboarded` if still needed
-
-2. Stop returning these fields to the frontend:
-
-   * `paystack_subaccount_code`
-   * `payout_recipient_code`
-
-3. Keep provider codes stored only server-side.
-
-4. Add a helper like:
-
-```python
-def mask_account_number(account_number: str | None) -> str | None:
-    if not account_number:
-        return None
-    return f"******{account_number[-4:]}"
-```
-
-Frontend changes:
-
-1. Update `frontend/lib/api.ts` types.
-2. Update dashboard settings page to display masked account number.
-3. Do not render full account number after save.
-4. Ensure edit mode can still show empty fields or require re-entry. Do not prefill the full saved account number if the API no longer returns it.
-5. Use simple copy:
-
-   * “Payout account saved”
-   * “Money from paid bookings will be sent to:”
-   * show account name, bank, masked account number
-
-Add tests where practical:
-
-* API returns masked account number
-* API does not return provider codes
-* frontend type no longer expects provider codes
-
-## Fix 6 — First-payout review should not repeatedly flag every payout
-
-Current problem:
-
-The first-payout logic checks previous payouts with `settlement_status == "paid"`. If the first payout is still under review, the next payout also becomes `first_payout`.
-
-Better rule:
-
-A tenant should only need first-payout review once.
-
-Implement one of these options:
-
-Preferred option:
-Add tenant-level fields:
-
-* `first_payout_review_completed_at TIMESTAMPTZ NULL`
-* optionally `first_payout_review_completed_by UUID NULL`
-
-Then:
-
-* If tenant has no `first_payout_review_completed_at`, queue first eligible payout as `needs_review` with `payout_review_reason = "first_payout"`.
-* When platform admin approves the first payout, set `first_payout_review_completed_at`.
-* Future payouts should not be flagged as first payout.
-
-If you do not want to add the tenant field yet, use a safer fallback:
-
-Count previous payouts with any of these statuses:
-
-* `paid`
-* `queued`
-* `processing`
-* `needs_review`
-* `failed`
-
-But the tenant-level flag is cleaner and preferred.
-
-Add migration for the tenant field if implemented.
-
-Add tests:
-
-* first payout for new tenant becomes `needs_review`
-* second payout while first is under review does not also become `first_payout`
-* after review is completed, future payouts queue automatically
-
-## Fix 7 — Payout setup should return clear verification feedback
-
-Current behavior:
-
-If bank lookup or transfer recipient creation fails, the system silently stores some details and sets `payment_setup_status = "not_started"`.
-
-This is safe technically but bad UX.
-
-Product rule:
-
-Users should know what happened.
-
-Expected API response should include:
-
-* `payout_ready: false`
-* `payment_setup_status: "not_started"` or better `"verification_failed"` if you add that status
-* a user-safe message or reason like:
-
-  * “We saved your details, but could not verify this payout account yet. Please check the bank name and account number.”
-
-Implementation options:
-
-Option A:
-Add `payout_setup_message` to `PaystackStatusResponse`.
-
-Option B:
-Return structured HTTP error when verification fails and do not save unverifiable details.
-
-Preferred for Bookie right now:
-
-Save the details, but return a warning message.
-
-Do not expose raw Paystack errors to the user.
-
-Add tests:
-
-* invalid bank returns user-safe message
-* recipient creation failure does not expose raw provider error
-* valid payout setup returns `payout_ready = true`
-
-## Fix 8 — Keep product copy simple and remove provider language
-
-Review the dashboard Payments/Payout page.
-
-Make sure the user-facing UI does not contain:
-
-* subaccount
-* direct split
-* routing payments
-* settlement configuration
-* provider setup
-* transfer recipient
-* Paystack setup
-
-The user should only see:
-
-* “Deposits are turned on”
-* “Customers can pay through your booking link.”
-* “Payout account needed”
-* “Add the bank account where you want to receive your money.”
-* “Payout account saved”
-* “Money from paid bookings will be sent to this account.”
-
-Do not add advanced payment setup back.
-
-## Fix 9 — Add tests for the full payment lifecycle
-
-Add or update tests covering:
-
-### Webhook tests
-
-* invalid signature returns 400
-* signed non-charge event returns 200 ignored
-* signed charge.success with wrong amount returns 200 ignored
-* signed charge.success with wrong currency returns 200 ignored
-* signed charge.success for expired payment returns 200 ignored and does not confirm booking
-* signed charge.success for pending payment confirms booking and queues payout correctly
-
-### Payout tests
-
-* first payout requires review
-* tenant owner cannot approve review payout
-* retry schedule is correct
-* retry limit sends payout to review
-* payout success marks as paid
-* payout missing account goes to `needs_setup`
-* no double processing with `processing` status
-
-### Payment lifecycle tests
-
-* unpaid pending booking expires after 15 minutes
-* expired payment cannot be confirmed later by webhook
-* expired booking releases slot only if the unique active slot index excludes expired bookings
-
-### API response tests
-
-* payout account number is masked
-* provider codes are not returned to frontend status response
-* invalid payout setup returns user-safe warning
-
-## Definition of done
-
-The work is complete only when:
-
-1. Tenant owners cannot approve their own manual-review payouts.
-2. First payout review is meaningful and cannot be bypassed.
-3. Expired bookings cannot be resurrected by late Paystack webhooks.
-4. Automated payouts support initial attempt + 3 retries, then review.
-5. Payout processor is safe against concurrent workers.
-6. Dashboard/API never expose full payout account number after save.
-7. Provider codes are not returned to the frontend.
-8. Payout setup errors are clear and user-safe.
-9. Tests cover the above cases.
-10. All existing tests pass.
-
-Run:
+Open your terminal (Command Prompt on Windows, Terminal on Mac/Linux) and run:
 
 ```bash
-cd backend
-python -m compileall app
-pytest
-alembic upgrade head
+git clone https://github.com/papycoda/booking-scheduler.git
+cd booking-scheduler
 ```
 
-Then run frontend checks:
+### Step 2: Install Dependencies
 
+**Backend (Python):**
+```bash
+cd backend
+pip install -r requirements.txt
+```
+
+**Frontend (Node.js):** (open a new terminal window)
 ```bash
 cd frontend
 npm install
-npm run lint
+```
+
+### Step 3: Set Up Environment Variables
+
+Create a file named `.env` in the `backend` folder with these settings:
+
+```bash
+cd backend
+# Copy the example file
+copy .env.example .env
+# On Mac/Linux use: cp .env.example .env
+```
+
+Now open `.env` in a text editor and fill in your details:
+
+| Setting | What to Put | Where to Get It |
+|---------|-------------|-----------------|
+| `SECRET_KEY` | A long random string (min 32 characters) | Make one up or use `python -c "import secrets; print(secrets.token_urlsafe(32))"` |
+| `FRONTEND_URL` | Your frontend URL | For local dev: `http://localhost:3000` |
+| `ENVIRONMENT` | `development` | — |
+| `DEMO_MODE` | `true` or `false` | Set to `true` to test payment flow without Paystack (development only) |
+| `DEMO_ADMIN_EMAILS` | Comma-separated admin emails | E.g., `test@gmail.com,admin@example.com` — only these emails can use demo mode |
+| `DATABASE_URL` | PostgreSQL connection string | Local Docker: `postgresql+asyncpg://booking_scheduler:booking_scheduler@127.0.0.1:5433/booking_scheduler` |
+| `REDIS_URL` | Redis connection string | Local Docker: `redis://127.0.0.1:6379` |
+| `PAYSTACK_SECRET_KEY` | Your Paystack secret key | From [Paystack Dashboard → Settings → API Keys](https://dashboard.paystack.co/#/settings/keys) |
+| `PAYSTACK_WEBHOOK_SECRET` | Your Paystack webhook secret | From [Paystack Dashboard → Settings → API Keys → Webhook](https://dashboard.paystack.co/#/settings/keys) |
+| `RESEND_API_KEY` | Your Resend API key | From [Resend Dashboard → API Keys](https://resend.com/api-keys) (optional) |
+| `FROM_EMAIL` | Sender email address | Your verified email in Resend (optional) |
+| `META_WHATSAPP_TOKEN` | WhatsApp access token | From Meta Developer Portal (optional) |
+| `META_WHATSAPP_PHONE_NUMBER_ID` | WhatsApp phone number ID | From Meta Developer Portal (optional) |
+| `META_WHATSAPP_BUSINESS_ACCOUNT_ID` | Business account ID | From Meta Developer Portal (optional) |
+
+### Step 4: Set Up the Database
+
+Run the database migration to create all tables:
+
+```powershell
+$env:PYTHONPATH='backend'
+.\.venv\Scripts\python.exe -m alembic -c backend\alembic.ini upgrade head
+```
+
+### Step 5: Start the Servers
+
+**Backend (Terminal 1):**
+```powershell
+$env:PYTHONPATH='backend'
+.\.venv\Scripts\python.exe -m uvicorn app.main:app --reload --app-dir backend
+```
+You should see: `Application startup complete` running at `http://127.0.0.1:8000`
+
+**Frontend (Terminal 2):**
+```bash
+cd frontend
+npm run dev
+```
+Visit `http://localhost:3000` in your browser.
+
+---
+
+## Demo Mode (Testing Without Paystack)
+
+Demo mode lets you test the complete payment flow without needing Paystack credentials. It simulates the entire booking-to-payment lifecycle—perfect for development, presentations, or exploring the app.
+
+### What Demo Mode Does
+
+When enabled:
+- Booking creation redirects to a mock payment page (`/demo/pay`)
+- Clicking "Complete Demo Payment" simulates a successful Paystack transaction
+- Booking status changes to "confirmed"
+- Payment is recorded as successful in the database
+- Payout is queued (if using platform_collected mode)
+- Confirmation notifications are sent (if configured)
+
+**What it doesn't do:**
+- No real money is charged
+- No actual Paystack transaction occurs
+- Webhook signature verification is bypassed
+
+### How to Enable Demo Mode
+
+In your `backend/.env` file, set:
+
+```env
+DEMO_MODE=true
+DEMO_ADMIN_EMAILS=test@gmail.com,admin@example.com
+```
+
+**⚠️ Security Note:** Demo mode is **admin-only**. Only emails listed in `DEMO_ADMIN_EMAILS` can access demo payments. All other bookings will proceed to real Paystack (and fail if Paystack credentials aren't configured).
+
+Then restart the backend server.
+
+**Configuration details:**
+- `DEMO_MODE=true` — Enables demo mode functionality
+- `DEMO_ADMIN_EMAILS` — Comma-separated list of authorized emails (case-insensitive)
+- If `DEMO_ADMIN_EMAILS` is empty or not set, demo mode is effectively disabled for everyone
+- Non-admin bookings silently fall back to real Paystack
+
+### Use Cases
+
+| Use Case | Why Demo Mode Helps |
+|----------|---------------------|
+| **Development** | Test payment flow without API keys |
+| **Presentations** | Demo the app live without real transactions |
+| **Onboarding** | Let stakeholders explore before integrating Paystack |
+| **CI/CD Testing** | Automated tests without external dependencies |
+
+> **⚠️ Important:** Demo mode is for **development and testing only**. Never enable it in production—you'd be accepting bookings without actually collecting payments!
+
+### Testing the Demo Flow
+
+1. Enable demo mode and add your email to `DEMO_ADMIN_EMAILS` in `.env`, then restart backend
+2. Go through the booking flow on the public page using an email from your admin list
+3. When redirected to `/demo/pay?reference=...`, click "Complete Demo Payment"
+4. Verify the booking shows as "confirmed" on the verify page
+
+---
+
+## Docker-Backed Local Setup
+
+**Prefer Docker for dependencies?** This project's `docker-compose.yml` starts PostgreSQL and Redis only. Run the backend and frontend from your local Python and Node installs.
+
+**What you'll need:**
+- **Docker Desktop** — [Download here](https://www.docker.com/products/docker-desktop/) (free)
+
+### Step 1: Get the Code
+
+```bash
+git clone https://github.com/papycoda/booking-scheduler.git
+cd booking-scheduler
+```
+
+### Step 2: Create Backend Environment File
+
+```bash
+# In the project root, create backend\.env from the example
+copy backend\.env.example backend\.env
+# On Mac/Linux use: cp backend/.env.example backend/.env
+```
+
+Open `backend/.env` in a text editor and fill in these local service values:
+
+```env
+SECRET_KEY=your-random-secret-key-min-32-chars
+FRONTEND_URL=http://localhost:3000
+ENVIRONMENT=development
+DATABASE_URL=postgresql+asyncpg://booking_scheduler:booking_scheduler@127.0.0.1:5433/booking_scheduler
+REDIS_URL=redis://127.0.0.1:6379
+PAYSTACK_SECRET_KEY=your-paystack-secret-key
+PAYSTACK_WEBHOOK_SECRET=your-paystack-webhook-secret
+# Optional: Resend for emails
+RESEND_API_KEY=your-resend-api-key
+FROM_EMAIL=noreply@yourdomain.com
+# Optional: WhatsApp
+META_WHATSAPP_TOKEN=
+META_WHATSAPP_PHONE_NUMBER_ID=
+META_WHATSAPP_BUSINESS_ACCOUNT_ID=
+```
+
+### Step 3: Start PostgreSQL and Redis
+
+```bash
+docker-compose up -d postgres redis
+```
+
+This starts:
+- **PostgreSQL database** on host port `5433`
+- **Redis cache** on host port `6379`
+
+Postgres uses `5433` to avoid conflicts with local PostgreSQL installs that commonly use `5432`.
+
+### Step 4: Run Database Migrations
+
+```powershell
+$env:PYTHONPATH='backend'
+.\.venv\Scripts\python.exe -m alembic -c backend\alembic.ini upgrade head
+```
+
+Do not use `docker-compose exec backend`; Compose does not define a `backend` service.
+
+### Step 5: Start the App
+
+```powershell
+# Terminal 1: backend API
+$env:PYTHONPATH='backend'
+.\.venv\Scripts\python.exe -m uvicorn app.main:app --reload --app-dir backend
+
+# Terminal 2: frontend
+cd frontend
+npm run dev
+```
+
+The API runs at `http://127.0.0.1:8000`; the frontend runs at `http://localhost:3000`.
+
+### Stop Everything
+
+```bash
+docker-compose down
+```
+
+### View Logs
+
+```bash
+# All services
+docker-compose logs -f
+
+# Specific service
+docker-compose logs -f postgres
+docker-compose logs -f redis
+```
+
+---
+
+## Using Bookie
+
+### For Business Owners
+
+**1. Create Your Account**
+
+Visit `http://localhost:3000/register` and sign up.
+
+**2. Set Up Your Business**
+
+After logging in, go to your dashboard and:
+
+- Add your business name, logo, and description
+- Set your working hours and availability
+- Add services you offer (with prices and duration)
+- Add staff members (if you have a team)
+- Connect your Paystack account for payments
+- Add your bank account for payouts
+
+**3. Get Your Booking Link**
+
+Once set up, you'll get a custom booking link like:
+```
+http://localhost:3000/book/your-business-name
+```
+
+Share this link with customers via WhatsApp, Instagram, email, or add it to your website.
+
+**4. Manage Bookings**
+
+In your dashboard, you can:
+- See all upcoming bookings
+- View booking history
+- Accept or reject reschedule requests
+- Track payments and payouts
+- Export reports
+
+### For Customers
+
+**1. Find the Business**
+
+Ask the business for their booking link, or visit the public booking page.
+
+**2. Choose a Service**
+
+Browse available services, see prices, and select what you need.
+
+**3. Pick a Time**
+
+See available time slots and choose what works for you.
+
+**4. Book and Pay**
+
+Enter your details and pay securely with Paystack. You'll receive a confirmation.
+
+**5. Reschedule if Needed**
+
+Need to change your appointment? Just click the reschedule link in your confirmation email (if enabled).
+
+---
+
+## Features
+
+| Feature | Description |
+|---------|-------------|
+| **Online Bookings 24/7** | Customers can book anytime, no phone calls needed |
+| **Secure Payments** | Integrated with Paystack for safe transactions |
+| **Automatic Payouts** | Money goes straight to your bank account |
+| **Deposit Support** | Optionally collect deposits to hold bookings |
+| **Staff Management** | Multiple team members with individual schedules |
+| **Service Catalog** | Define your services with prices and duration |
+| **Rescheduling** | Easy reschedule requests with approval workflow |
+| **Notifications** | Email and WhatsApp reminders (optional) |
+| **Multi-Business** | Run multiple businesses from one account |
+
+---
+
+## Deployment Guide
+
+### Deploying to Production
+
+**Option 1: Vercel (Recommended for Frontend)**
+
+```bash
+cd frontend
 npm run build
+vercel deploy
 ```
 
-If any command fails, fix it before finishing.
+**Option 2: Railway/Render (Backend)**
 
-## Important constraints
+1. Push your code to GitHub
+2. Connect your repository to [Railway](https://railway.app) or [Render](https://render.com)
+3. Add environment variables in their dashboard
+4. Deploy!
 
-* Do not use sync DB calls inside the FastAPI backend.
-* Do not return raw provider errors to users.
-* Do not log secrets, tokens, raw Paystack keys, or full account numbers.
-* Do not reintroduce advanced payment setup into the user-facing dashboard.
-* Do not change unrelated product flows.
-* Do not silently make risky product decisions. Leave a TODO and explain if something is ambiguous.
-* Keep all error responses structured:
+**Important:** When deploying, update:
+- `FRONTEND_URL` to your production domain
+- `DATABASE_URL` to your production database
+- `PAYSTACK_WEBHOOK_SECRET` to your production webhook secret
+- Configure Paystack webhook URL to point to your backend
 
-```json
-{
-  "error": "ERROR_CODE",
-  "message": "Human-readable message."
-}
-```
+---
 
-## Expected commit message
+## Troubleshooting
 
-Use this commit message:
+### Common Issues
 
-`fix: harden payout automation and payment lifecycle safety`
+**Problem:** Backend won't start
+- **Check:** Python version is 3.12+
+- **Check:** All dependencies installed with `pip install -r requirements.txt`
+- **Check:** Database URL is correct in `.env`
+
+**Problem:** Frontend won't start
+- **Check:** Node.js version is 20+
+- **Check:** Ran `npm install` in the frontend folder
+- **Check:** No other app is using port 3000
+
+**Problem:** Database connection error
+- **Check:** Database is running and accessible
+- **Check:** `DATABASE_URL` format is correct: `postgresql://user:password@host:port/database`
+- **Check:** Firewall allows connections
+
+**Problem:** Payments not working
+- **Check:** Paystack keys are correct
+- **Check:** Using test keys for testing, live keys for production
+- **Check:** Webhook URL is configured in Paystack dashboard
+
+**Problem:** Webhook not being received
+- **Check:** Using ngrok or similar for local testing
+- **Check:** Paystack webhook URL points to `https://your-domain.com/api/webhooks/paystack`
+- **Check:** `PAYSTACK_WEBHOOK_SECRET` matches Paystack dashboard
+
+**Docker Issues:**
+
+**Problem:** Docker won't start
+- **Check:** Docker Desktop is running
+- **Check:** No other app is using port 5433 or 6379
+- **Windows:** Make sure WSL 2 is installed
+
+**Problem:** `docker-compose up` fails with database errors
+- **Check:** Run `docker-compose down -v` then `docker-compose up -d` to reset volumes
+- **Check:** No other PostgreSQL is running on port 5433
+
+**Problem:** Can't access frontend/backend
+- **Check:** Start backend and frontend locally; Docker only starts Postgres and Redis
+- **Check:** Run `docker-compose ps` to verify Postgres and Redis are healthy
+- **Check:** `docker-compose logs` shows no database or Redis errors
+
+---
+
+## Need Help?
+
+- **Documentation:** See `CLAUDE.md` for technical details
+- **Issues:** Open an issue on [GitHub](https://github.com/papycoda/booking-scheduler/issues)
+- **Paystack Support:** [https://paystack.co/support](https://paystack.co/support)
+
+---
+
+## License
+
+This project is open source and available under the MIT License.
+
+---
+
+## What's Next?
+
+Bookie is continuously improving. Upcoming features:
+
+- SMS notifications
+- Calendar sync (Google Calendar, Outlook)
+- Advanced reporting and analytics
+- Mobile apps
+- Multi-language support
+
+Want to contribute? We welcome pull requests!
+
+---
+
+Made with ❤️ for Nigerian small businesses

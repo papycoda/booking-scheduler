@@ -6,7 +6,7 @@ from sqlalchemy import delete, insert, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database import get_db
-from app.dependencies import get_current_user
+from app.dependencies import get_current_user, require_tenant_owner
 from app.models.service import Service, staff_services
 from app.models.staff import Staff
 from app.models.user import User
@@ -57,7 +57,7 @@ async def list_staff(
 @router.post("", response_model=StaffResponse, status_code=status.HTTP_201_CREATED)
 async def create_staff(
     payload: StaffCreateRequest,
-    current_user: Annotated[User, Depends(get_current_user)],
+    current_user: Annotated[User, Depends(require_tenant_owner)],
     db: Annotated[AsyncSession, Depends(get_db)],
 ) -> Staff:
     staff = Staff(tenant_id=current_user.tenant_id, **payload.model_dump())
@@ -80,7 +80,7 @@ async def read_staff(
 async def update_staff(
     staff_id: UUID,
     payload: StaffUpdateRequest,
-    current_user: Annotated[User, Depends(get_current_user)],
+    current_user: Annotated[User, Depends(require_tenant_owner)],
     db: Annotated[AsyncSession, Depends(get_db)],
 ) -> Staff:
     staff = await get_tenant_staff(db, current_user.tenant_id, staff_id)
@@ -94,7 +94,7 @@ async def update_staff(
 @router.delete("/{staff_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def delete_staff(
     staff_id: UUID,
-    current_user: Annotated[User, Depends(get_current_user)],
+    current_user: Annotated[User, Depends(require_tenant_owner)],
     db: Annotated[AsyncSession, Depends(get_db)],
 ) -> None:
     staff = await get_tenant_staff(db, current_user.tenant_id, staff_id)
@@ -106,7 +106,7 @@ async def delete_staff(
 async def assign_staff_services(
     staff_id: UUID,
     payload: StaffServiceAssignmentRequest,
-    current_user: Annotated[User, Depends(get_current_user)],
+    current_user: Annotated[User, Depends(require_tenant_owner)],
     db: Annotated[AsyncSession, Depends(get_db)],
 ) -> None:
     await get_tenant_staff(db, current_user.tenant_id, staff_id)
@@ -129,7 +129,7 @@ async def assign_staff_services(
 async def remove_staff_service(
     staff_id: UUID,
     service_id: UUID,
-    current_user: Annotated[User, Depends(get_current_user)],
+    current_user: Annotated[User, Depends(require_tenant_owner)],
     db: Annotated[AsyncSession, Depends(get_db)],
 ) -> None:
     await get_tenant_staff(db, current_user.tenant_id, staff_id)

@@ -178,6 +178,13 @@ async def public_booking_status(
     if row is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail={"error": "BOOKING_NOT_FOUND", "message": "Booking was not found."})
     booking, payment, service, staff = row
+    has_valid_token = bool(token and verify_manage_token(token, booking.manage_token_hash))
+    if not has_valid_token:
+        return PublicBookingStatusResponse(
+            booking_id=booking.id,
+            booking_status=booking.status,
+            payment_status=payment.status if payment else None,
+        )
     return PublicBookingStatusResponse(
         booking_id=booking.id,
         booking_status=booking.status,
@@ -190,7 +197,7 @@ async def public_booking_status(
         deposit_amount=booking.deposit_amount,
         price_status=booking.price_status,
         quoted_price=booking.quoted_price,
-        manage_url=manage_url_for_booking(slug, booking.id, token) if token and verify_manage_token(token, booking.manage_token_hash) else None,
+        manage_url=manage_url_for_booking(slug, booking.id, token),
     )
 
 
@@ -262,7 +269,7 @@ async def public_inspo_asset(
     asset = result.scalar_one_or_none()
     if asset is None or asset.data is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail={"error": "INSPO_NOT_FOUND", "message": "Inspiration image was not found."})
-    return Response(content=asset.data, media_type=asset.content_type)
+    return Response(content=asset.data, media_type=asset.content_type, headers={"X-Content-Type-Options": "nosniff"})
 
 
 @router.post("/{slug}/bookings/{booking_id}/cancel", status_code=204)

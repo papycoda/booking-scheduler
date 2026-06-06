@@ -59,6 +59,7 @@ async def approve_payout(db: AsyncSession, *, tenant_id: UUID, payment_id: UUID)
     # Mark tenant's first payout review as completed if approving first payout
     if payment.payout_review_reason == "first_payout" and tenant is not None:
         tenant.first_payout_review_completed_at = datetime.now(UTC)
+        await db.commit()
 
     payment.settlement_status = "queued"
     payment.payout_review_reason = None

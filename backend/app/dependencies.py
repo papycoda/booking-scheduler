@@ -60,3 +60,14 @@ async def get_current_user(
             )
 
     return user
+
+
+async def require_tenant_owner(
+    current_user: Annotated[User, Depends(get_current_user)],
+) -> User:
+    if current_user.role != "tenant_owner":
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail={"error": "INSUFFICIENT_ROLE", "message": "Tenant owner access is required."},
+        )
+    return current_user

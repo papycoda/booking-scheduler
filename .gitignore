@@ -4,6 +4,12 @@ __pycache__/
 tmp/
 .playwright-cli/
 
+.env
+.env.*
+!.env.example
+backend/.env
+backend/.env.*
+!backend/.env.example
 backend/uploads/
 frontend/.next/
 frontend/.next-dev/
@@ -12,3 +18,6 @@ CLAUDE.md
 .claude/settings.local.json
 frontend/public/auth/reference.png
 backend/image.png
+.codex-security-scans/*
+backend/.env
+AGENTS.md

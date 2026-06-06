@@ -39,12 +39,12 @@ class PublicBookingStatusResponse(BaseModel):
     booking_status: str
     payment_status: str | None = None
     reference: str | None = None
-    start_time: datetime
-    end_time: datetime
-    service_name: str
-    staff_name: str
-    deposit_amount: int
-    price_status: str
+    start_time: datetime | None = None
+    end_time: datetime | None = None
+    service_name: str | None = None
+    staff_name: str | None = None
+    deposit_amount: int | None = None
+    price_status: str | None = None
     quoted_price: int | None = None
     manage_url: str | None = None
 

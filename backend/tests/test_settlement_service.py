@@ -143,7 +143,8 @@ class SettlementServiceTests(unittest.IsolatedAsyncioTestCase):
             payout_review_reason="first_payout",
             next_payout_attempt_at=None,
         )
-        db = FakeSession(payment, None)
+        tenant = SimpleNamespace(id=tenant_id, first_payout_review_completed_at=None)
+        db = FakeSession(payment, tenant)
 
         result = await svc.approve_payout(db, tenant_id=tenant_id, payment_id=payment.id)
 
@@ -152,6 +153,8 @@ class SettlementServiceTests(unittest.IsolatedAsyncioTestCase):
         self.assertIsNone(payment.payout_review_reason)
         self.assertIsNotNone(payment.next_payout_attempt_at)
         self.assertTrue(db.committed)
+        # Verify tenant's first_payout_review_completed_at flag is set
+        self.assertIsNotNone(tenant.first_payout_review_completed_at)
 
     async def test_failed_payout_retries_three_times_then_needs_review(self):
         payment = SimpleNamespace(

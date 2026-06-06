@@ -4,6 +4,7 @@ import { FormEvent, useEffect, useState } from "react";
 import Link from "next/link";
 import { api, getAccessToken, storeAccessToken } from "../../../lib/api";
 import { AuthShell } from "../../../components/AuthShell";
+import { safeRelativeRedirect } from "../../../lib/navigation";
 
 export default function LoginPage() {
   const [error, setError] = useState("");
@@ -24,7 +25,7 @@ export default function LoginPage() {
         password: form.get("password"),
       });
       storeAccessToken(response.access_token);
-      const next = new URLSearchParams(window.location.search).get("next") || "/dashboard";
+      const next = safeRelativeRedirect(new URLSearchParams(window.location.search).get("next"));
       window.location.href = next;
     } catch (err) {
       setError(err instanceof Error ? err.message : "Unable to login");

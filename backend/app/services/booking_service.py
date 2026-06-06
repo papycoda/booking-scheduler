@@ -1,4 +1,5 @@
 from datetime import UTC, datetime, timedelta
+from urllib.parse import urlencode
 from uuid import UUID
 
 from fastapi import HTTPException, status
@@ -145,9 +146,13 @@ async def create_public_booking(
         db.add(payment)
 
     await db.commit()
+    # For demo mode, append slug and booking_id to the URL for proper redirect
+    payment_url = paystack_data["authorization_url"]
+    if payment_url and "/demo/pay?" in payment_url:
+        payment_url = f"{payment_url}&{urlencode({'slug': tenant.slug, 'booking_id': str(booking.id), 'manage_token': manage_token})}"
     return PublicBookingCreateResponse(
         booking_id=booking.id,
-        payment_url=paystack_data["authorization_url"],
+        payment_url=payment_url,
         reference=reference,
         deposit_amount=deposit_amount,
         manage_url=manage_url,

@@ -1,6 +1,6 @@
 from functools import lru_cache
 
-from pydantic import AnyHttpUrl, Field
+from pydantic import AnyHttpUrl, Field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -12,6 +12,8 @@ class Settings(BaseSettings):
     redis_url: str
     paystack_secret_key: str
     paystack_webhook_secret: str | None = None
+    demo_mode: bool = False
+    demo_admin_emails: str = Field(default="")
     resend_api_key: str | None = None
     from_email: str | None = None
     meta_whatsapp_token: str | None = None
@@ -26,6 +28,13 @@ class Settings(BaseSettings):
     refresh_token_days: int = 7
 
     model_config = SettingsConfigDict(env_file=("backend/.env", ".env"), env_file_encoding="utf-8", extra="ignore")
+
+    @property
+    def demo_admin_emails_list(self) -> list[str]:
+        """Parse and normalize demo admin emails from the config string."""
+        if not self.demo_admin_emails:
+            return []
+        return [email.strip().lower() for email in self.demo_admin_emails.split(",") if email.strip()]
 
     @property
     def sqlalchemy_database_url(self) -> str:

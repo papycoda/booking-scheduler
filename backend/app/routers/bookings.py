@@ -7,7 +7,7 @@ from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database import get_db
-from app.dependencies import get_current_user
+from app.dependencies import get_current_user, require_tenant_owner
 from app.models.booking import Booking, BookingInspoAsset, BookingRescheduleRequest, Client
 from app.models.payment import Payment
 from app.models.service import Service
@@ -186,7 +186,7 @@ async def decide_dashboard_reschedule_request(
 @router.post("/payments/{payment_id}/payout", response_model=DashboardPayoutResponse)
 async def initiate_dashboard_payout(
     payment_id: UUID,
-    current_user: Annotated[User, Depends(get_current_user)],
+    current_user: Annotated[User, Depends(require_tenant_owner)],
     db: Annotated[AsyncSession, Depends(get_db)],
 ) -> DashboardPayoutResponse:
     payment = await initiate_platform_collected_payout(db, tenant_id=current_user.tenant_id, payment_id=payment_id)
@@ -243,7 +243,7 @@ async def list_dashboard_payouts(
 @router.post("/payouts/{payment_id}/approve", response_model=DashboardPayoutResponse)
 async def approve_dashboard_payout(
     payment_id: UUID,
-    current_user: Annotated[User, Depends(get_current_user)],
+    current_user: Annotated[User, Depends(require_tenant_owner)],
     db: Annotated[AsyncSession, Depends(get_db)],
 ) -> DashboardPayoutResponse:
     # Load payment first to check settlement_status before approving
@@ -271,7 +271,7 @@ async def approve_dashboard_payout(
 @router.post("/payouts/{payment_id}/retry", response_model=DashboardPayoutResponse)
 async def retry_dashboard_payout(
     payment_id: UUID,
-    current_user: Annotated[User, Depends(get_current_user)],
+    current_user: Annotated[User, Depends(require_tenant_owner)],
     db: Annotated[AsyncSession, Depends(get_db)],
 ) -> DashboardPayoutResponse:
     # Load payment first to check settlement_status before retrying
