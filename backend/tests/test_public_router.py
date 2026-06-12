@@ -12,6 +12,8 @@ os.environ.setdefault("REDIS_URL", "redis://localhost:6379")
 os.environ.setdefault("PAYSTACK_SECRET_KEY", "sk_test_x")
 
 from app.routers import public as public_router  # noqa: E402
+from app.schemas.assistant import AssistantRequest  # noqa: E402
+from app.schemas.assistant import AssistantResponse  # noqa: E402
 from app.services.booking_management_service import hash_manage_token  # noqa: E402
 
 
@@ -58,9 +60,12 @@ class FakeTenantLookupSession:
 class PublicRouterTests(unittest.IsolatedAsyncioTestCase):
     def setUp(self) -> None:
         self.original_get_public_tenant = public_router.get_public_tenant
+        self.original_answer_public_assistant_message = getattr(public_router, "answer_public_assistant_message", None)
 
     def tearDown(self) -> None:
         public_router.get_public_tenant = self.original_get_public_tenant
+        if self.original_answer_public_assistant_message is not None:
+            public_router.answer_public_assistant_message = self.original_answer_public_assistant_message
 
     async def test_public_staff_rejects_service_outside_tenant(self):
         tenant = SimpleNamespace(id=uuid4())
@@ -231,3 +236,70 @@ class PublicRouterTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(response.staff_name, "Ada")
         self.assertEqual(response.deposit_amount, 5_000)
         self.assertIn("token=valid-token", response.manage_url)
+
+    async def test_public_assistant_resolves_tenant_by_slug_and_delegates(self):
+        tenant = SimpleNamespace(id=uuid4(), name="LeTest Beauty Salon")
+        seen = {}
+
+        async def get_public_tenant(db, slug):
+            seen["db"] = db
+            seen["slug"] = slug
+            return tenant
+
+        async def answer_public_assistant_message(db, *, tenant, slug, payload):
+            seen["assistant"] = (db, tenant, slug, payload)
+            return AssistantResponse(reply="Hello", intent="fallback", suggested_actions=[])
+
+        public_router.get_public_tenant = get_public_tenant
+        public_router.answer_public_assistant_message = answer_public_assistant_message
+
+        db = FakeSession([])
+        payload = AssistantRequest(message="What services do you offer?")
+        response = await public_router.public_assistant.__wrapped__(SimpleNamespace(), "tenant-slug", payload, db)
+
+        self.assertEqual(response.reply, "Hello")
+        self.assertEqual(seen["slug"], "tenant-slug")
+        self.assertIs(seen["assistant"][0], db)
+        self.assertIs(seen["assistant"][1], tenant)
+        self.assertEqual(seen["assistant"][2], "tenant-slug")
+        self.assertEqual(seen["assistant"][3].message, "What services do you offer?")
+
+    async def test_public_assistant_preserves_missing_tenant_404(self):
+        async def get_public_tenant(_db, _slug):
+            from fastapi import HTTPException
+
+            raise HTTPException(status_code=404, detail={"error": "TENANT_NOT_FOUND"})
+
+        public_router.get_public_tenant = get_public_tenant
+
+        with self.assertRaises(Exception) as raised:
+            await public_router.public_assistant.__wrapped__(
+                SimpleNamespace(),
+                "missing-slug",
+                AssistantRequest(message="Hello"),
+                FakeSession([]),
+            )
+
+        self.assertEqual(getattr(raised.exception, "status_code", None), 404)
+
+    async def test_public_assistant_body_cannot_override_tenant_id(self):
+        tenant = SimpleNamespace(id=uuid4(), name="Real Tenant")
+        captured = {}
+
+        async def get_public_tenant(_db, _slug):
+            return tenant
+
+        async def answer_public_assistant_message(_db, *, tenant, slug, payload):
+            captured["tenant"] = tenant
+            captured["payload"] = payload
+            return AssistantResponse(reply="Safe", intent="fallback", suggested_actions=[])
+
+        public_router.get_public_tenant = get_public_tenant
+        public_router.answer_public_assistant_message = answer_public_assistant_message
+
+        payload = AssistantRequest.model_validate({"message": "Hello", "tenant_id": str(uuid4())})
+        response = await public_router.public_assistant.__wrapped__(SimpleNamespace(), "tenant-slug", payload, FakeSession([]))
+
+        self.assertEqual(response.reply, "Safe")
+        self.assertIs(captured["tenant"], tenant)
+        self.assertFalse(hasattr(captured["payload"], "tenant_id"))

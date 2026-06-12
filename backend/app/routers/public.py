@@ -25,7 +25,9 @@ from app.schemas.booking import (
     PublicRescheduleRequestCreate,
     PublicRescheduleRequestResponse,
 )
+from app.schemas.assistant import AssistantRequest, AssistantResponse
 from app.schemas.public import PublicServiceResponse, PublicSlotResponse, PublicStaffResponse, PublicTenantResponse
+from app.services.assistant_service import answer_public_assistant_message
 from app.services.availability_service import generate_available_slots
 from app.services.booking_service import create_public_booking
 from app.services.booking_management_service import (
@@ -125,6 +127,18 @@ async def public_slots(
     tenant = await get_public_tenant(db, slug)
     slots = await generate_available_slots(db, tenant_id=tenant.id, service_id=service_id, requested_date=requested_date, staff_id=staff_id)
     return [PublicSlotResponse(start_time=slot.start_time, end_time=slot.end_time) for slot in slots]
+
+
+@router.post("/{slug}/assistant", response_model=AssistantResponse)
+@limiter.limit("30/minute")
+async def public_assistant(
+    request: Request,
+    slug: str,
+    payload: AssistantRequest,
+    db: Annotated[AsyncSession, Depends(get_db)],
+) -> AssistantResponse:
+    tenant = await get_public_tenant(db, slug)
+    return await answer_public_assistant_message(db, tenant=tenant, slug=slug, payload=payload)
 
 
 @router.post("/{slug}/bookings", response_model=PublicBookingCreateResponse)

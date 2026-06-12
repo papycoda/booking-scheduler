@@ -78,6 +78,37 @@ export type Slot = {
   end_time: string;
 };
 
+export type AssistantAction = {
+  type: "view_service" | "book_now" | "show_slots";
+  label: string;
+  service_id?: string | null;
+  start_time?: string | null;
+};
+
+export type AssistantRequest = {
+  message: string;
+  context?: {
+    service_id?: string | null;
+    selected_date?: string | null;
+  } | null;
+};
+
+export type AssistantResponse = {
+  reply: string;
+  intent:
+    | "list_services"
+    | "service_price"
+    | "service_duration"
+    | "available_slots"
+    | "business_location"
+    | "deposit_policy"
+    | "cancellation_policy"
+    | "reschedule_policy"
+    | "how_to_book"
+    | "fallback";
+  suggested_actions: AssistantAction[];
+};
+
 export type DashboardBooking = {
   id: string;
   payment_id?: string | null;
@@ -302,6 +333,8 @@ export const api = {
   resetPassword: (body: unknown) => request<{ status: string }>("/auth/reset-password", { method: "POST", body: JSON.stringify(body) }),
   tenant: (slug: string) => request<Tenant>(`/book/${slug}`),
   services: (slug: string) => request<Service[]>(`/book/${slug}/services`),
+  assistant: (slug: string, body: AssistantRequest) =>
+    request<AssistantResponse>(`/book/${slug}/assistant`, { method: "POST", body: JSON.stringify(body) }),
   staff: (slug: string, serviceId: string) => request<Staff[]>(`/book/${slug}/staff?service_id=${serviceId}`),
   slots: (slug: string, serviceId: string, date: string, staffId?: string) => {
     const params = new URLSearchParams({ service_id: serviceId, date });

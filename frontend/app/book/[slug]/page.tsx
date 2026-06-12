@@ -1,8 +1,22 @@
 "use client";
 
-import { FormEvent, useEffect, useState } from "react";
+import { FormEvent, useEffect, useRef, useState } from "react";
 import { useParams } from "next/navigation";
-import { api, formatNgn, Service, Slot, Staff, Tenant } from "../../../lib/api";
+import { api, AssistantAction, formatNgn, Service, Slot, Staff, Tenant } from "../../../lib/api";
+
+type GuideMessage = {
+  id: string;
+  role: "customer" | "assistant";
+  text: string;
+  actions?: AssistantAction[];
+};
+
+const QUICK_ASSISTANT_MESSAGES = [
+  "What services do you offer?",
+  "Do I need to pay deposit?",
+  "Are you available tomorrow?",
+  "Where are you located?",
+];
 
 function PlantLeft() {
   return (
@@ -69,6 +83,7 @@ function addDays(date: Date, days: number) {
 export default function PublicBookingPage() {
   const params = useParams<{ slug: string }>();
   const slug = params.slug ?? "";
+  const bookingSectionRef = useRef<HTMLFormElement | null>(null);
   const [tenant, setTenant] = useState<Tenant | null>(null);
   const [services, setServices] = useState<Service[]>([]);
   const [staff, setStaff] = useState<Staff[]>([]);
@@ -86,6 +101,11 @@ export default function PublicBookingPage() {
   const [slotsLoading, setSlotsLoading] = useState(false);
   const [submitLoading, setSubmitLoading] = useState(false);
   const [error, setError] = useState("");
+  const [guideOpen, setGuideOpen] = useState(false);
+  const [guideMessages, setGuideMessages] = useState<GuideMessage[]>([]);
+  const [guideDraft, setGuideDraft] = useState("");
+  const [guideLoading, setGuideLoading] = useState(false);
+  const [guideError, setGuideError] = useState("");
   const selectedService = services.find((service) => service.id === serviceId);
   const selectedStaff = staff.find((member) => member.id === staffId);
   const minDate = formatDateInput(new Date());
@@ -167,6 +187,61 @@ export default function PublicBookingPage() {
     }
   }
 
+  function scrollToBooking() {
+    bookingSectionRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+  }
+
+  function handleAssistantAction(action: AssistantAction) {
+    if ((action.type === "view_service" || action.type === "show_slots") && action.service_id) {
+      setServiceId(action.service_id);
+    }
+    if (action.type === "show_slots" && action.start_time) {
+      setSlot(action.start_time);
+    }
+    scrollToBooking();
+  }
+
+  async function sendAssistantMessage(rawMessage: string) {
+    const message = rawMessage.trim();
+    if (!message || !slug || guideLoading) return;
+    const customerMessage: GuideMessage = {
+      id: `${Date.now()}-customer`,
+      role: "customer",
+      text: message,
+    };
+    setGuideMessages((current) => [...current, customerMessage]);
+    setGuideDraft("");
+    setGuideError("");
+    setGuideLoading(true);
+    try {
+      const response = await api.assistant(slug, {
+        message,
+        context: {
+          service_id: serviceId || null,
+          selected_date: date || null,
+        },
+      });
+      setGuideMessages((current) => [
+        ...current,
+        {
+          id: `${Date.now()}-assistant`,
+          role: "assistant",
+          text: response.reply,
+          actions: response.suggested_actions,
+        },
+      ]);
+    } catch {
+      setGuideError("I could not answer that right now. You can continue with the booking page.");
+    } finally {
+      setGuideLoading(false);
+    }
+  }
+
+  function submitGuideMessage(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    void sendAssistantMessage(guideDraft);
+  }
+
   return (
     <main className="relative flex min-h-screen justify-center overflow-hidden bg-[#f5f8f6] px-4 py-6 text-ink md:px-12 md:py-12">
       <div className="pointer-events-none absolute bottom-0 left-0 z-0 h-[500px] w-96 opacity-40">
@@ -207,7 +282,7 @@ export default function PublicBookingPage() {
           </section>
         </aside>
 
-        <form onSubmit={submit} className="grid gap-10 rounded-2xl border border-white/80 bg-white/90 p-6 shadow-[0_30px_60px_rgba(14,71,49,0.05)] backdrop-blur-xl md:p-10 lg:col-span-8">
+        <form ref={bookingSectionRef} onSubmit={submit} className="grid gap-10 rounded-2xl border border-white/80 bg-white/90 p-6 shadow-[0_30px_60px_rgba(14,71,49,0.05)] backdrop-blur-xl md:p-10 lg:col-span-8">
           <section className="grid gap-6">
             <StepHeader number="1" title="Service and time" subtitle="Step 1 of 2" icon="time" />
 
@@ -325,6 +400,95 @@ export default function PublicBookingPage() {
             </svg>
           </button>
         </form>
+      </div>
+
+      <div className="fixed bottom-4 right-4 z-50 flex w-[calc(100vw-2rem)] max-w-sm flex-col items-end gap-3 sm:bottom-6 sm:right-6">
+        {guideOpen && (
+          <section className="w-full overflow-hidden rounded-2xl border border-white/80 bg-white shadow-[0_24px_60px_rgba(14,71,49,0.16)]">
+            <div className="flex items-start justify-between gap-3 border-b border-line/70 bg-[#f8faf9] px-4 py-3">
+              <div>
+                <p className="text-sm font-bold text-ink">Bookie Assistant</p>
+                <p className="mt-1 text-xs font-medium leading-relaxed text-ink/65">
+                  Hi, I'm Bookie Assistant for {tenant?.name ?? "this business"}. Ask me about services, prices, availability, deposits, or booking.
+                </p>
+              </div>
+              <button
+                type="button"
+                aria-label="Close assistant"
+                onClick={() => setGuideOpen(false)}
+                className="flex h-8 min-h-0 w-8 shrink-0 items-center justify-center rounded-lg border border-line/70 bg-white p-0 text-ink shadow-none hover:translate-y-0 hover:bg-[#eef4ef] hover:shadow-none"
+              >
+                x
+              </button>
+            </div>
+
+            <div className="grid max-h-[22rem] gap-3 overflow-y-auto px-4 py-3">
+              {guideMessages.length === 0 && (
+                <div className="grid gap-2">
+                  {QUICK_ASSISTANT_MESSAGES.map((question) => (
+                    <button
+                      key={question}
+                      type="button"
+                      onClick={() => void sendAssistantMessage(question)}
+                      className="min-h-0 rounded-xl border border-line/70 bg-white px-3 py-2 text-left text-xs font-semibold text-ink shadow-none hover:translate-y-0 hover:border-action/30 hover:bg-[#f8faf9] hover:text-action hover:shadow-none"
+                    >
+                      {question}
+                    </button>
+                  ))}
+                </div>
+              )}
+
+              {guideMessages.map((message) => (
+                <div key={message.id} className={`grid gap-2 ${message.role === "customer" ? "justify-items-end" : "justify-items-start"}`}>
+                  <p
+                    className={`max-w-[85%] rounded-2xl px-3 py-2 text-sm leading-relaxed ${
+                      message.role === "customer" ? "bg-action text-white" : "bg-[#f1f5f2] text-ink"
+                    }`}
+                  >
+                    {message.text}
+                  </p>
+                  {message.actions && message.actions.length > 0 && (
+                    <div className="flex max-w-[85%] flex-wrap gap-2">
+                      {message.actions.map((action, index) => (
+                        <button
+                          key={`${message.id}-${action.type}-${action.service_id ?? action.start_time ?? index}`}
+                          type="button"
+                          onClick={() => handleAssistantAction(action)}
+                          className="min-h-0 rounded-full border border-action/20 bg-white px-3 py-1.5 text-xs font-semibold text-action shadow-none hover:translate-y-0 hover:bg-[#eef4ef] hover:shadow-none"
+                        >
+                          {action.label}
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              ))}
+
+              {guideLoading && <p className="text-xs font-semibold text-ink/55">Checking...</p>}
+              {guideError && <p className="rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-xs font-semibold text-red-700">{guideError}</p>}
+            </div>
+
+            <form onSubmit={submitGuideMessage} className="flex gap-2 border-t border-line/70 p-3">
+              <input
+                className="min-h-[2.75rem] rounded-xl bg-[#f8faf9] text-sm"
+                value={guideDraft}
+                onChange={(event) => setGuideDraft(event.target.value)}
+                placeholder="Ask about prices, availability, deposits"
+              />
+              <button type="submit" disabled={!guideDraft.trim() || guideLoading} className="min-h-[2.75rem] rounded-xl px-4 text-sm">
+                Send
+              </button>
+            </form>
+          </section>
+        )}
+
+        <button
+          type="button"
+          onClick={() => setGuideOpen((current) => !current)}
+          className="rounded-full border-0 bg-action px-5 py-3 text-sm font-bold text-white shadow-[0_18px_40px_rgba(14,71,49,0.22)]"
+        >
+          Need help?
+        </button>
       </div>
     </main>
   );
