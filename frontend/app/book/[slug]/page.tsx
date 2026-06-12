@@ -1,6 +1,7 @@
 "use client";
 
 import { FormEvent, useEffect, useState } from "react";
+import { useParams } from "next/navigation";
 import { api, formatNgn, Service, Slot, Staff, Tenant } from "../../../lib/api";
 
 function PlantLeft() {
@@ -65,7 +66,9 @@ function addDays(date: Date, days: number) {
   return next;
 }
 
-export default function PublicBookingPage({ params }: { params: { slug: string } }) {
+export default function PublicBookingPage() {
+  const params = useParams<{ slug: string }>();
+  const slug = params.slug ?? "";
   const [tenant, setTenant] = useState<Tenant | null>(null);
   const [services, setServices] = useState<Service[]>([]);
   const [staff, setStaff] = useState<Staff[]>([]);
@@ -102,34 +105,41 @@ export default function PublicBookingPage({ params }: { params: { slug: string }
   const slotHeading = hasSlotInputs ? `Times for ${slotScopeLabel} on ${selectedDateLabel}` : "Available times";
 
   useEffect(() => {
-    api.tenant(params.slug).then(setTenant).catch((err) => setError(err.message));
-    api.services(params.slug).then(setServices).catch((err) => setError(err.message));
-  }, [params.slug]);
+    if (!slug) return;
+    api.tenant(slug).then(setTenant).catch((err) => setError(err.message));
+    api.services(slug).then(setServices).catch((err) => setError(err.message));
+  }, [slug]);
 
   useEffect(() => {
+    if (!slug) return;
     setStaff([]);
     setStaffId("");
     setSlots([]);
     setSlot("");
     if (!serviceId) return;
-    api.staff(params.slug, serviceId).then(setStaff).catch((err) => setError(err.message));
-  }, [params.slug, serviceId]);
+    api.staff(slug, serviceId).then(setStaff).catch((err) => setError(err.message));
+  }, [slug, serviceId]);
 
   useEffect(() => {
+    if (!slug) return;
     setSlots([]);
     setSlot("");
     if (!serviceId || !date) return;
     if (dateValidationError) return;
     setSlotsLoading(true);
     setError("");
-    api.slots(params.slug, serviceId, date, staffId || undefined)
+    api.slots(slug, serviceId, date, staffId || undefined)
       .then(setSlots)
       .catch((err) => setError(err.message))
       .finally(() => setSlotsLoading(false));
-  }, [params.slug, serviceId, staffId, date, dateValidationError]);
+  }, [slug, serviceId, staffId, date, dateValidationError]);
 
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    if (!slug) {
+      setError("Invalid booking link");
+      return;
+    }
     setError("");
     setSubmitLoading(true);
     try {
@@ -148,7 +158,7 @@ export default function PublicBookingPage({ params }: { params: { slug: string }
       const body = new FormData();
       body.set("payload", JSON.stringify(payload));
       Array.from(inspoImages ?? []).forEach((file) => body.append("inspo_images", file));
-      const response = await api.createBooking(params.slug, body);
+      const response = await api.createBooking(slug, body);
       window.location.href = response.payment_url;
     } catch (err) {
       setError(err instanceof Error ? err.message : "Unable to create booking");
