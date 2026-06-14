@@ -1,6 +1,7 @@
 from datetime import UTC, datetime, timedelta
-from urllib.parse import urlencode
+from urllib.parse import urlencode, urlunparse, urlparse, parse_qs, urlunsplit
 from uuid import UUID
+import zoneinfo
 
 from fastapi import HTTPException, status
 from sqlalchemy import func, select
@@ -39,7 +40,7 @@ async def create_public_booking(
             detail={"error": "DEPOSIT_REQUIRED", "message": "This service needs a deposit amount before it can be booked online."},
         )
     start_utc = payload.start_time.astimezone(UTC)
-    requested_date = payload.start_time.astimezone(__import__("zoneinfo").ZoneInfo(tenant.timezone)).date()
+    requested_date = payload.start_time.astimezone(zoneinfo.ZoneInfo(tenant.timezone)).date()
     slots = await generate_available_slots(
         db,
         tenant_id=tenant.id,
@@ -149,7 +150,11 @@ async def create_public_booking(
     # For demo mode, append slug and booking_id to the URL for proper redirect
     payment_url = paystack_data["authorization_url"]
     if payment_url and "/demo/pay?" in payment_url:
-        payment_url = f"{payment_url}&{urlencode({'slug': tenant.slug, 'booking_id': str(booking.id), 'manage_token': manage_token})}"
+        parsed = urlparse(payment_url)
+        query_params = parse_qs(parsed.query)
+        query_params.update({'slug': [tenant.slug], 'booking_id': [str(booking.id)], 'manage_token': [manage_token]})
+        new_query = urlencode(query_params, doseq=True)
+        payment_url = urlunsplit((parsed.scheme, parsed.netloc, parsed.path, new_query, parsed.fragment))
     return PublicBookingCreateResponse(
         booking_id=booking.id,
         payment_url=payment_url,

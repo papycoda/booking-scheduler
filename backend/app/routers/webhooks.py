@@ -105,7 +105,8 @@ async def paystack_webhook(
     x_paystack_signature: str | None = Header(default=None),
 ) -> JSONResponse:
     raw_body = await request.body()
-    expected_signature = hmac.new(settings.paystack_secret_key.encode("utf-8"), raw_body, hashlib.sha512).hexdigest()
+    webhook_secret = settings.paystack_webhook_secret or settings.paystack_secret_key
+    expected_signature = hmac.new(webhook_secret.encode("utf-8"), raw_body, hashlib.sha512).hexdigest()
     if not x_paystack_signature or not hmac.compare_digest(x_paystack_signature, expected_signature):
         return JSONResponse(status_code=status.HTTP_400_BAD_REQUEST, content={"status": "invalid_signature"})
 

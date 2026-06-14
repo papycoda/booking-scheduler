@@ -65,11 +65,16 @@ npm install
 
 Create a file named `.env` in the `backend` folder with these settings:
 
+**Windows (PowerShell):**
+```powershell
+cd backend
+copy .env.example .env
+```
+
+**macOS/Linux (bash/sh):**
 ```bash
 cd backend
-# Copy the example file
-copy .env.example .env
-# On Mac/Linux use: cp .env.example .env
+cp .env.example .env
 ```
 
 Now open `.env` in a text editor and fill in your details:
@@ -95,18 +100,34 @@ Now open `.env` in a text editor and fill in your details:
 
 Run the database migration to create all tables:
 
+**Windows (PowerShell):**
 ```powershell
 $env:PYTHONPATH='backend'
 .\.venv\Scripts\python.exe -m alembic -c backend\alembic.ini upgrade head
 ```
 
+**macOS/Linux (bash/sh):**
+```bash
+export PYTHONPATH='backend'
+python -m alembic -c backend/alembic.ini upgrade head
+```
+
 ### Step 5: Start the Servers
 
 **Backend (Terminal 1):**
+
+Windows (PowerShell):
 ```powershell
 $env:PYTHONPATH='backend'
 .\.venv\Scripts\python.exe -m uvicorn app.main:app --reload --app-dir backend
 ```
+
+macOS/Linux (bash/sh):
+```bash
+export PYTHONPATH='backend'
+python -m uvicorn app.main:app --reload --app-dir backend
+```
+
 You should see: `Application startup complete` running at `http://127.0.0.1:8000`
 
 **Frontend (Terminal 2):**
@@ -114,6 +135,7 @@ You should see: `Application startup complete` running at `http://127.0.0.1:8000
 cd frontend
 npm run dev
 ```
+
 Visit `http://localhost:3000` in your browser.
 
 ---
@@ -192,10 +214,16 @@ cd booking-scheduler
 
 ### Step 2: Create Backend Environment File
 
-```bash
+**Windows (PowerShell):**
+```powershell
 # In the project root, create backend\.env from the example
 copy backend\.env.example backend\.env
-# On Mac/Linux use: cp backend/.env.example backend/.env
+```
+
+**macOS/Linux (bash/sh):**
+```bash
+# In the project root, create backend/.env from the example
+cp backend/.env.example backend/.env
 ```
 
 Open `backend/.env` in a text editor and fill in these local service values:
@@ -231,19 +259,38 @@ Postgres uses `5433` to avoid conflicts with local PostgreSQL installs that comm
 
 ### Step 4: Run Database Migrations
 
+**Windows (PowerShell):**
 ```powershell
 $env:PYTHONPATH='backend'
 .\.venv\Scripts\python.exe -m alembic -c backend\alembic.ini upgrade head
+```
+
+**macOS/Linux (bash/sh):**
+```bash
+export PYTHONPATH='backend'
+python -m alembic -c backend/alembic.ini upgrade head
 ```
 
 Do not use `docker-compose exec backend`; Compose does not define a `backend` service.
 
 ### Step 5: Start the App
 
+**Windows (PowerShell):**
 ```powershell
 # Terminal 1: backend API
 $env:PYTHONPATH='backend'
 .\.venv\Scripts\python.exe -m uvicorn app.main:app --reload --app-dir backend
+
+# Terminal 2: frontend
+cd frontend
+npm run dev
+```
+
+**macOS/Linux (bash/sh):**
+```bash
+# Terminal 1: backend API
+export PYTHONPATH='backend'
+python -m uvicorn app.main:app --reload --app-dir backend
 
 # Terminal 2: frontend
 cd frontend
