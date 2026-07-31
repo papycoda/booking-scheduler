@@ -19,8 +19,8 @@ const steps = [
   {
     icon: Storefront,
     number: "01",
-    title: "Set up your services",
-    description: "Add what you offer, your prices, duration, team, and working hours in minutes.",
+    title: "Set up what people can book",
+    description: "Add your services, sessions, spaces or experiences, then set the price, duration and availability.",
   },
   {
     icon: LinkSimple,
@@ -194,16 +194,18 @@ export default function HomePage() {
 
       <section className="mx-auto grid min-h-[680px] max-w-7xl items-center gap-14 px-5 py-16 sm:px-8 lg:grid-cols-[0.88fr_1.12fr] lg:py-20">
         <div className="relative z-30 max-w-2xl">
-          <span className="inline-flex items-center gap-2 rounded-full border border-[#dbe7df] bg-white px-3 py-1.5 text-xs font-bold text-[#0f6b4f]"><ShieldCheck size={15} weight="fill" /> Built for service businesses</span>
+          <span className="inline-flex items-center gap-2 rounded-full border border-[#dbe7df] bg-white px-3 py-1.5 text-xs font-bold text-[#0f6b4f]"><ShieldCheck size={15} weight="fill" /> Booking made simple</span>
           <h1 className="mt-6 text-[clamp(3rem,6vw,5.6rem)] font-black leading-[0.95] tracking-[-0.065em] text-[#092d20]">
             Your bookings, availability and deposits—handled through one simple link.
           </h1>
-          <p className="mt-7 max-w-xl text-lg font-medium leading-8 text-[#50685d]">Set up your services, share your link, and let clients book and pay without the back-and-forth.</p>
-          <div className="mt-9 flex flex-col gap-3 sm:flex-row">
-            <Link href="/register" className="inline-flex min-h-13 items-center justify-center gap-2 rounded-xl bg-[#0f6b4f] px-6 text-sm font-bold text-white shadow-[0_16px_32px_rgba(15,107,79,0.2)] transition hover:-translate-y-0.5 hover:bg-[#0a563f]">Create your booking page <ArrowRight size={17} weight="bold" /></Link>
-            <Link href="/book/bookie-live-demo" className="inline-flex min-h-13 items-center justify-center rounded-xl border border-[#0f6b4f] bg-white px-6 text-sm font-bold text-[#0f6b4f] transition hover:bg-[#f1f7f3]">View live demo</Link>
+          <p className="mt-7 max-w-xl text-lg font-medium leading-8 text-[#50685d]">Set up what people can book, share your link, and let them choose a time and pay without the back-and-forth.</p>
+          <div className="mt-9 flex flex-col gap-2 sm:flex-row sm:items-center sm:gap-4">
+            <Link href="/register" className="group inline-flex min-h-14 w-full items-center justify-between rounded-2xl bg-[#0f6b4f] px-5 text-sm font-bold text-white shadow-[0_16px_32px_rgba(15,107,79,0.2)] transition hover:-translate-y-0.5 hover:bg-[#0a563f] sm:w-auto sm:min-w-[250px]">
+              <span>Create your booking page</span><span className="grid h-8 w-8 place-items-center rounded-full bg-white/15 transition group-hover:translate-x-0.5"><ArrowRight size={17} weight="bold" /></span>
+            </Link>
+            <Link href="/book/bookie-live-demo" className="inline-flex min-h-12 items-center justify-center gap-2 rounded-xl px-4 text-sm font-bold text-[#0f6b4f] transition hover:bg-[#f1f7f3] sm:border sm:border-[#bcd2c5] sm:bg-white">See a live booking page <ArrowRight size={15} weight="bold" /></Link>
           </div>
-          <p className="mt-5 flex items-center gap-2 text-sm font-semibold text-[#60766a]"><Check size={16} weight="bold" className="text-[#0f6b4f]" /> No customer app or account required</p>
+          <p className="mt-5 flex items-center gap-2 text-sm font-semibold text-[#60766a]"><Check size={16} weight="bold" className="text-[#0f6b4f]" /> People can book without an app or account</p>
         </div>
         <div className="relative min-h-[570px] rounded-[2.5rem] bg-[#eef4ef] p-8 sm:p-12">
           <div className="absolute inset-x-8 top-8 flex items-center justify-between text-xs font-bold text-[#60766a]"><span>BOOKING EXPERIENCE</span><span className="rounded-full bg-[#ffdfcc] px-3 py-1 text-[#8a4721]">Live product</span></div>
@@ -217,7 +219,7 @@ export default function HomePage() {
       <div className="mx-auto max-w-7xl px-5 sm:px-8">
         <div className="flex flex-col items-center justify-center gap-3 rounded-2xl border border-[#f2dfd2] bg-[#fff5ed] px-6 py-5 text-center text-sm font-bold text-[#173a2d] sm:flex-row sm:gap-5">
           <span className="grid h-10 w-10 place-items-center rounded-full bg-[#ffdcc7] text-[#80441f]"><Storefront size={21} weight="duotone" /></span>
-          Built for salons, barbers, consultants, photographers, technicians and service businesses.
+          For anyone offering something people can book—time, services, spaces, sessions or experiences.
         </div>
       </div>
 

@@ -1,5 +1,6 @@
 import os
 import unittest
+from datetime import UTC, datetime
 from types import SimpleNamespace
 from uuid import uuid4
 
@@ -163,6 +164,37 @@ class NotificationServiceTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(call["json"]["subject"], "Booking confirmed")
         self.assertEqual(call["json"]["text"], "Your appointment is confirmed.")
         self.assertEqual(call["json"]["html"], "<p>Your appointment is confirmed.</p>")
+
+    def test_booking_confirmation_content_is_human_and_actionable(self):
+        booking_id = uuid4()
+        manage_url = f"https://bookie.example/book/studio/manage/{booking_id}?token=secure-token"
+
+        text, html = svc.build_booking_confirmation_content(
+            client_name="Opeyemi Ogunbanwo",
+            tenant_name="Bookie Launch Studio",
+            service_name="Consultation",
+            staff_name="Ayo",
+            start_time=datetime(2026, 8, 6, 10, 45, tzinfo=UTC),
+            timezone="Africa/Lagos",
+            manage_url=manage_url,
+        )
+
+        self.assertIn("Thursday, 6 August 2026 at 11:45 AM", text)
+        self.assertIn("Manage your booking", html)
+        self.assertIn("Button not working?", html)
+        self.assertIn(manage_url, html)
+        self.assertNotIn("Reference", text)
+        self.assertNotIn(str(booking_id), text.replace(manage_url, ""))
+
+    def test_whatsapp_confirmation_omits_internal_reference(self):
+        body = svc.format_whatsapp_body(
+            "booking_confirmation",
+            ["Ada", "Braids", "Mina", "Monday, 1 June 2026 at 10:00 AM", "internal-booking-id"],
+        )
+
+        self.assertIn("Monday, 1 June 2026 at 10:00 AM", body)
+        self.assertNotIn("internal-booking-id", body)
+        self.assertNotIn("Reference", body)
 
     async def test_logged_email_uses_recipient_scoped_provider_idempotency(self):
         svc.httpx.AsyncClient = FakeAsyncClient

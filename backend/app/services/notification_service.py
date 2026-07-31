@@ -1,5 +1,7 @@
 import logging
 from datetime import UTC, datetime, timedelta
+from html import escape
+from zoneinfo import ZoneInfo
 
 import httpx
 from sqlalchemy import select
@@ -15,6 +17,95 @@ from app.models.user import User
 from app.services.booking_management_service import create_manage_token_for_booking, manage_url_for_booking
 
 logger = logging.getLogger(__name__)
+
+
+def format_local_datetime(value: datetime, timezone: str) -> str:
+    local_value = value.astimezone(ZoneInfo(timezone))
+    time_label = local_value.strftime("%I:%M %p").lstrip("0")
+    return f"{local_value.strftime('%A')}, {local_value.day} {local_value.strftime('%B %Y')} at {time_label}"
+
+
+def build_booking_confirmation_content(
+    *,
+    client_name: str,
+    tenant_name: str,
+    service_name: str,
+    staff_name: str,
+    start_time: datetime,
+    timezone: str,
+    manage_url: str | None,
+) -> tuple[str, str]:
+    time_label = format_local_datetime(start_time, timezone)
+    text_lines = [
+        f"Hi {client_name},",
+        "",
+        f"Your booking with {tenant_name} is confirmed.",
+        "",
+        f"Service: {service_name}",
+        f"With: {staff_name}",
+        f"When: {time_label}",
+    ]
+    if manage_url:
+        text_lines.extend(
+            [
+                "",
+                f"Manage your booking: {manage_url}",
+                "",
+                "If the link does not open, copy and paste it into your browser.",
+            ]
+        )
+    text_lines.extend(["", "Please note: deposits are non-refundable.", "", f"See you then,", tenant_name])
+
+    safe_client = escape(client_name)
+    safe_tenant = escape(tenant_name)
+    safe_service = escape(service_name)
+    safe_staff = escape(staff_name)
+    safe_time = escape(time_label)
+    manage_block = ""
+    if manage_url:
+        safe_url = escape(manage_url, quote=True)
+        manage_block = f"""
+          <tr><td style="padding:28px 0 0">
+            <a href="{safe_url}" style="display:inline-block;background:#0f6b4f;color:#ffffff;text-decoration:none;font-size:15px;font-weight:700;padding:14px 22px;border-radius:12px">Manage your booking</a>
+          </td></tr>
+          <tr><td style="padding:16px 0 0;color:#60766a;font-size:12px;line-height:18px">
+            Button not working? Copy and paste this link into your browser:<br>
+            <a href="{safe_url}" style="color:#0f6b4f;word-break:break-all">{safe_url}</a>
+          </td></tr>
+        """
+
+    html = f"""<!doctype html>
+<html lang="en">
+  <body style="margin:0;background:#f4f8f5;font-family:Arial,Helvetica,sans-serif;color:#0f2119">
+    <div style="display:none;max-height:0;overflow:hidden">Your booking with {safe_tenant} is confirmed.</div>
+    <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="background:#f4f8f5;padding:24px 12px">
+      <tr><td align="center">
+        <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="max-width:600px;background:#ffffff;border:1px solid #e2ebe5;border-radius:20px;overflow:hidden">
+          <tr><td style="background:#0a4d37;padding:24px 30px;color:#ffffff;font-size:25px;font-weight:800;letter-spacing:-1px">Bookie</td></tr>
+          <tr><td style="padding:34px 30px">
+            <table role="presentation" width="100%" cellspacing="0" cellpadding="0">
+              <tr><td><span style="display:inline-block;background:#e8f4ec;color:#0f6b4f;font-size:12px;font-weight:700;padding:7px 11px;border-radius:999px">Booking confirmed</span></td></tr>
+              <tr><td style="padding:22px 0 0;font-size:24px;font-weight:800;line-height:31px">You&apos;re booked, {safe_client}.</td></tr>
+              <tr><td style="padding:10px 0 0;color:#50685d;font-size:15px;line-height:24px">Your appointment with <strong style="color:#0f2119">{safe_tenant}</strong> is confirmed.</td></tr>
+              <tr><td style="padding:24px 0 0">
+                <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="background:#f6f9f7;border:1px solid #e2ebe5;border-radius:14px">
+                  <tr><td style="padding:18px 20px 8px;color:#60766a;font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:1px">Appointment details</td></tr>
+                  <tr><td style="padding:8px 20px;color:#60766a;font-size:14px">Service<br><strong style="display:block;padding-top:3px;color:#0f2119;font-size:16px">{safe_service}</strong></td></tr>
+                  <tr><td style="padding:8px 20px;color:#60766a;font-size:14px">With<br><strong style="display:block;padding-top:3px;color:#0f2119;font-size:16px">{safe_staff}</strong></td></tr>
+                  <tr><td style="padding:8px 20px 20px;color:#60766a;font-size:14px">When<br><strong style="display:block;padding-top:3px;color:#0f2119;font-size:16px;line-height:23px">{safe_time}</strong></td></tr>
+                </table>
+              </td></tr>
+              {manage_block}
+              <tr><td style="padding:24px 0 0;color:#60766a;font-size:13px;line-height:20px">Please note: deposits are non-refundable.</td></tr>
+              <tr><td style="padding:26px 0 0;color:#0f2119;font-size:14px;line-height:22px">See you then,<br><strong>{safe_tenant}</strong></td></tr>
+            </table>
+          </td></tr>
+        </table>
+      </td></tr>
+    </table>
+  </body>
+</html>"""
+    return "\n".join(text_lines), html
 
 
 async def send_email(
@@ -33,7 +124,7 @@ async def send_email(
         "to": [to_email],
         "subject": subject,
         "text": text,
-        "html": html or f"<p>{text}</p>",
+        "html": html or f"<p>{escape(text).replace(chr(10), '<br>')}</p>",
     }
     headers = {"Authorization": f"Bearer {settings.resend_api_key}"}
     if idempotency_key:
@@ -72,10 +163,10 @@ async def send_whatsapp_template(*, to_number: str, template_name: str, body_par
 
 def format_whatsapp_body(template_name: str, body_params: list[str]) -> str:
     if template_name == "booking_confirmation" and len(body_params) >= 5:
-        full_name, service_name, staff_name, start_time, booking_id = body_params[:5]
+        full_name, service_name, staff_name, start_time, _booking_id = body_params[:5]
         return (
             f"Hi {full_name}, your {service_name} appointment with {staff_name} is confirmed for {start_time}. "
-            f"Reference: {booking_id}. Deposits are non-refundable."
+            "Deposits are non-refundable."
         )
     if template_name == "booking_reminder" and len(body_params) >= 3:
         service_name, start_time, staff_name = body_params[:3]
@@ -132,10 +223,14 @@ async def send_booking_confirmation(db: AsyncSession, booking: Booking) -> None:
     context = await load_booking_context(db, booking)
     tenant, client, service, staff = context
     manage_url = manage_url_for_booking(tenant.slug, booking.id, create_manage_token_for_booking(booking.id))
-    manage_text = f" Manage your booking here: {manage_url}. Deposits are non-refundable." if manage_url else " Deposits are non-refundable."
-    text = (
-        f"Hi {client.full_name}, your {service.name} appointment with {staff.name} "
-        f"is confirmed for {booking.start_time.isoformat()}. Ref: {booking.id}.{manage_text}"
+    text, html = build_booking_confirmation_content(
+        client_name=client.full_name,
+        tenant_name=tenant.name,
+        service_name=service.name,
+        staff_name=staff.name,
+        start_time=booking.start_time,
+        timezone=tenant.timezone,
+        manage_url=manage_url,
     )
     await send_and_log_email(
         db,
@@ -143,8 +238,9 @@ async def send_booking_confirmation(db: AsyncSession, booking: Booking) -> None:
         recipient_type="client",
         notification_type="booking_confirmation",
         to_email=client.email,
-        subject=f"{tenant.name} booking confirmation",
+        subject=f"Your {service.name} booking is confirmed",
         text=text,
+        html=html,
     )
     if client.whatsapp_number:
         await send_and_log_whatsapp(
@@ -154,7 +250,7 @@ async def send_booking_confirmation(db: AsyncSession, booking: Booking) -> None:
             notification_type="booking_confirmation",
             to_number=client.whatsapp_number,
             template_name="booking_confirmation",
-            body_params=[client.full_name, service.name, staff.name, booking.start_time.isoformat(), str(booking.id)],
+            body_params=[client.full_name, service.name, staff.name, format_local_datetime(booking.start_time, tenant.timezone), str(booking.id)],
         )
     owner = await load_tenant_owner(db, tenant.id)
     if owner is not None:
@@ -167,7 +263,7 @@ async def send_booking_confirmation(db: AsyncSession, booking: Booking) -> None:
             subject=f"New booking for {tenant.name}",
             text=(
                 f"New booking: {client.full_name} booked {service.name} with {staff.name} "
-                f"for {booking.start_time.isoformat()}."
+                f"for {format_local_datetime(booking.start_time, tenant.timezone)}."
             ),
         )
 
@@ -243,6 +339,7 @@ async def send_and_log_email(
     to_email: str,
     subject: str,
     text: str,
+    html: str | None = None,
 ) -> bool:
     if await notification_already_sent(db, booking.id, recipient_type, "email", notification_type):
         return False
@@ -251,6 +348,7 @@ async def send_and_log_email(
             to_email=to_email,
             subject=subject,
             text=text,
+            html=html,
             idempotency_key=f"notification:{booking.id}:{recipient_type}:email:{notification_type}",
         )
         if not sent:
