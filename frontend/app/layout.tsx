@@ -1,8 +1,8 @@
 import "./globals.css";
 
 export const metadata = {
-  title: "Booking Scheduler",
-  description: "Multi-tenant appointment booking for small businesses",
+  title: "Bookie — Bookings and deposits through one simple link",
+  description: "Create a booking page, share your link, and let clients choose a time and pay their deposit without the back-and-forth.",
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
