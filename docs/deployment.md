@@ -31,12 +31,17 @@ PAYSTACK_SECRET_KEY=<paystack-secret-key>
 PAYSTACK_WEBHOOK_SECRET=<paystack-webhook-secret>
 RESEND_API_KEY=<resend-api-key>
 FROM_EMAIL=<verified-sender-email>
-META_WHATSAPP_TOKEN=<meta-whatsapp-token>
-META_WHATSAPP_PHONE_NUMBER_ID=<meta-phone-number-id>
-META_WHATSAPP_BUSINESS_ACCOUNT_ID=<meta-business-account-id>
+TWILIO_ACCOUNT_SID=<optional-twilio-account-sid>
+TWILIO_AUTH_TOKEN=<optional-twilio-auth-token>
+TWILIO_WHATSAPP_FROM_NUMBER=<optional-approved-whatsapp-sender>
 ```
 
 `SECRET_KEY`, `DATABASE_URL`, and `REDIS_URL` are provided by the Blueprint.
+Bookie's v1 link-based booking flow does not require Twilio. If WhatsApp is
+enabled later, configure all three Twilio values together.
+
+Paystack signs webhook events with `PAYSTACK_SECRET_KEY`, so a separate webhook
+secret is not required. Keep `DEMO_MODE=false` in production.
 
 ### Frontend service
 
@@ -58,3 +63,13 @@ https://<api-service>.onrender.com/api/v1/webhooks/paystack
 ```
 
 7. Run a Paystack sandbox booking and confirm the booking moves from `pending_payment` to `confirmed`.
+
+## Preview versus production
+
+The Blueprint currently uses Render's free instance types so it can be used for
+a preview deployment without committing to paid infrastructure. Do not treat
+that setup as durable production hosting: free Postgres expires, free Key Value
+storage is not persistent, and free web services can restart or sleep.
+
+Before accepting customer bookings, choose paid Postgres, Key Value, API, and
+frontend plans, then confirm backups and provider alerts are enabled.

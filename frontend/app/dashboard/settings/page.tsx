@@ -8,6 +8,7 @@ const sectionLinks = [
   ["Booking link", "booking-link"],
   ["Business details", "business-details"],
   ["Booking rules", "booking-rules"],
+  ["WhatsApp front desk", "whatsapp-front-desk"],
   ["Deposits", "deposits"],
   ["Payments", "payments"],
   ["Payout account", "payout-account"],
@@ -77,6 +78,7 @@ export default function SettingsPage() {
         name: form.get("name"),
         description: form.get("description") || null,
         phone: form.get("phone") || null,
+        whatsapp_number: form.get("whatsapp_number") || null,
         address: form.get("address") || null,
         timezone: form.get("timezone"),
         allow_staff_selection: form.get("allow_staff_selection") === "on",
@@ -84,6 +86,12 @@ export default function SettingsPage() {
         default_deposit_amount: ngnToKobo(form.get("default_deposit_amount")),
         min_notice_hours: Number(form.get("min_notice_hours")),
         cancellation_notice_hours: Number(form.get("cancellation_notice_hours")),
+        front_desk_intro: form.get("front_desk_intro") || null,
+        front_desk_hours: form.get("front_desk_hours") || null,
+        front_desk_service_areas: form.get("front_desk_service_areas") || null,
+        front_desk_prep_notes: form.get("front_desk_prep_notes") || null,
+        front_desk_policies: form.get("front_desk_policies") || null,
+        front_desk_escalation_rules: form.get("front_desk_escalation_rules") || null,
       });
       setTenant(updated);
       setSlugDraft(updated.slug);
@@ -190,6 +198,7 @@ export default function SettingsPage() {
                 <label className="bookie-label">Business name<input name="name" placeholder="Le'Test Beauty Salon" defaultValue={tenant?.name ?? ""} required /></label>
                 <label className="bookie-label">Timezone<input name="timezone" placeholder="Africa/Lagos" defaultValue={tenant?.timezone ?? "Africa/Lagos"} required /></label>
                 <label className="bookie-label">Phone<input name="phone" placeholder="+234..." defaultValue={tenant?.phone ?? ""} /></label>
+                <label className="bookie-label">WhatsApp number<input name="whatsapp_number" placeholder="+234..." defaultValue={tenant?.whatsapp_number ?? ""} /></label>
                 <label className="bookie-label">Address<input name="address" placeholder="Business address" defaultValue={tenant?.address ?? ""} /></label>
                 <label className="bookie-label sm:col-span-2">What clients should know<textarea name="description" placeholder="Short description clients will see on your booking page." defaultValue={tenant?.description ?? ""} /></label>
               </div>
@@ -206,6 +215,19 @@ export default function SettingsPage() {
                 <input className="h-4 min-h-0 w-4 accent-[#0e4731]" name="allow_staff_selection" type="checkbox" defaultChecked={tenant?.allow_staff_selection ?? true} />
                 Let clients choose staff
               </label>
+            </section>
+
+            <section id="whatsapp-front-desk" className="bookie-card scroll-mt-8 p-5">
+              <h2 className="section-title">WhatsApp front desk</h2>
+              <p className="bookie-subtitle mt-1">These notes guide the WhatsApp booking desk and the human handoff flow.</p>
+              <div className="mt-5 grid gap-4">
+                <label className="bookie-label">Front desk intro<textarea name="front_desk_intro" placeholder="Short greeting or brand voice for the WhatsApp desk." defaultValue={tenant?.front_desk_intro ?? ""} /></label>
+                <label className="bookie-label">Hours and availability<textarea name="front_desk_hours" placeholder="Working hours, off days, response windows." defaultValue={tenant?.front_desk_hours ?? ""} /></label>
+                <label className="bookie-label">Service areas<textarea name="front_desk_service_areas" placeholder="Which areas you serve, branches, or travel zones." defaultValue={tenant?.front_desk_service_areas ?? ""} /></label>
+                <label className="bookie-label">Preparation notes<textarea name="front_desk_prep_notes" placeholder="What customers should prepare before arriving or booking." defaultValue={tenant?.front_desk_prep_notes ?? ""} /></label>
+                <label className="bookie-label">Policies<textarea name="front_desk_policies" placeholder="Cancellation, deposit, late arrival, or other policy text." defaultValue={tenant?.front_desk_policies ?? ""} /></label>
+                <label className="bookie-label">Escalation rules<textarea name="front_desk_escalation_rules" placeholder="When the bot should hand off to a human." defaultValue={tenant?.front_desk_escalation_rules ?? ""} /></label>
+              </div>
             </section>
 
             <section id="deposits" className="bookie-card scroll-mt-8 p-5">

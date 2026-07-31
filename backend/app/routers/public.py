@@ -25,9 +25,7 @@ from app.schemas.booking import (
     PublicRescheduleRequestCreate,
     PublicRescheduleRequestResponse,
 )
-from app.schemas.assistant import AssistantRequest, AssistantResponse
 from app.schemas.public import PublicServiceResponse, PublicSlotResponse, PublicStaffResponse, PublicTenantResponse
-from app.services.assistant_service import answer_public_assistant_message
 from app.services.availability_service import generate_available_slots
 from app.services.booking_service import create_public_booking
 from app.services.booking_management_service import (
@@ -129,18 +127,6 @@ async def public_slots(
     return [PublicSlotResponse(start_time=slot.start_time, end_time=slot.end_time) for slot in slots]
 
 
-@router.post("/{slug}/assistant", response_model=AssistantResponse)
-@limiter.limit("30/minute")
-async def public_assistant(
-    request: Request,
-    slug: str,
-    payload: AssistantRequest,
-    db: Annotated[AsyncSession, Depends(get_db)],
-) -> AssistantResponse:
-    tenant = await get_public_tenant(db, slug)
-    return await answer_public_assistant_message(db, tenant=tenant, slug=slug, payload=payload)
-
-
 @router.post("/{slug}/bookings", response_model=PublicBookingCreateResponse)
 @limiter.limit("10/minute")
 async def public_create_booking(
@@ -164,11 +150,48 @@ async def parse_public_booking_request(request: Request) -> tuple[PublicBookingC
             files = [item for item in form.getlist("inspo_images") if isinstance(item, StarletteUploadFile)]
             return PublicBookingCreateRequest.model_validate(json.loads(raw_payload)), files
         return PublicBookingCreateRequest.model_validate(await request.json()), []
-    except (json.JSONDecodeError, ValidationError, ValueError) as exc:
+    except ValidationError as exc:
         raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-            detail={"error": "VALIDATION_ERROR", "message": "Booking request payload is invalid."},
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+            detail={
+                "error": "VALIDATION_ERROR",
+                "message": "Please fix the highlighted booking details.",
+                "fields": booking_validation_fields(exc),
+            },
         ) from exc
+    except json.JSONDecodeError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+            detail={"error": "VALIDATION_ERROR", "message": "Booking details must be valid JSON."},
+        ) from exc
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+            detail={"error": "VALIDATION_ERROR", "message": str(exc) or "Booking request payload is invalid."},
+        ) from exc
+
+
+def booking_validation_fields(exc: ValidationError) -> list[dict[str, str]]:
+    fields: list[dict[str, str]] = []
+    for error in exc.errors():
+        loc = [str(part) for part in error.get("loc", [])]
+        field = ".".join(loc)
+        message = booking_validation_message(field, str(error.get("msg", "Invalid value.")))
+        fields.append({"field": field, "message": message})
+    return fields
+
+
+def booking_validation_message(field: str, fallback: str) -> str:
+    messages = {
+        "client.full_name": "Enter your full name.",
+        "client.email": "Enter a valid email address.",
+        "client.phone": "Enter a valid phone number with 10 to 15 digits.",
+        "client.whatsapp_number": "Enter a valid WhatsApp number with 10 to 15 digits.",
+        "service_id": "Choose a valid service.",
+        "staff_id": "Choose a valid staff member, or leave staff as any available staff.",
+        "start_time": "Choose a valid appointment time.",
+    }
+    return messages.get(field, fallback)
 
 
 @router.get("/{slug}/bookings/{booking_id}/status", response_model=PublicBookingStatusResponse)

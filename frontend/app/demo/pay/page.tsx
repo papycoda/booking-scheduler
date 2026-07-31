@@ -68,7 +68,7 @@ function DemoPaymentContent() {
         <div className="grid place-items-center gap-3">
           <div className="grid h-16 w-16 place-items-center rounded-full bg-gradient-to-br from-[#0e4731] to-[#1b5e43] text-white shadow-md">
             <svg className="h-8 w-8" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24" aria-hidden="true">
-              <path strokeLinecap="round" strokeLinejoin="round" d="M12 2c0 3.866-4 7-9 7s-9-3.134-9-7 4-7 9-7 9 3.134 9 7zm0 0c0 3.866 4 7 9 7s9-3.134 9-7m-9 7a4 4 0 01-4-4c0-1.866 4-4 9-4 9 2.134 4 4-4 4-4 4-4-9-7-9-7z" />
+              <path strokeLinecap="round" strokeLinejoin="round" d="M3 8.25h18M5.25 5.25h13.5A2.25 2.25 0 0 1 21 7.5v9a2.25 2.25 0 0 1-2.25 2.25H5.25A2.25 2.25 0 0 1 3 16.5v-9a2.25 2.25 0 0 1 2.25-2.25Z" />
             </svg>
           </div>
           <div>

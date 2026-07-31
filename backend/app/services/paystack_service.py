@@ -9,6 +9,20 @@ class PaystackError(Exception):
     pass
 
 
+class PaystackNotConfiguredError(PaystackError):
+    pass
+
+
+def paystack_headers(*, idempotency_key: str | None = None) -> dict[str, str]:
+    secret_key = settings.paystack_secret_key.strip()
+    if not secret_key:
+        raise PaystackNotConfiguredError("Paystack secret key is not configured.")
+    headers = {"Authorization": f"Bearer {secret_key}"}
+    if idempotency_key:
+        headers["X-Idempotency-Key"] = idempotency_key
+    return headers
+
+
 async def create_subaccount(
     *,
     business_name: str,
@@ -22,7 +36,7 @@ async def create_subaccount(
         "account_number": account_number,
         "percentage_charge": percentage_charge,
     }
-    headers = {"Authorization": f"Bearer {settings.paystack_secret_key}"}
+    headers = paystack_headers()
     async with httpx.AsyncClient(timeout=15) as client:
         response = await client.post("https://api.paystack.co/subaccount", json=payload, headers=headers)
     if response.status_code >= 400:
@@ -57,10 +71,7 @@ async def initialize_transaction(
         payload["bearer"] = bearer or "subaccount"
     if transaction_charge:
         payload["transaction_charge"] = transaction_charge
-    headers = {
-        "Authorization": f"Bearer {settings.paystack_secret_key}",
-        "X-Idempotency-Key": reference,
-    }
+    headers = paystack_headers(idempotency_key=reference)
     async with httpx.AsyncClient(timeout=20) as client:
         response = await client.post("https://api.paystack.co/transaction/initialize", json=payload, headers=headers)
     if response.status_code >= 400:
@@ -85,7 +96,7 @@ async def create_transfer_recipient(
         "bank_code": bank_code,
         "currency": currency,
     }
-    headers = {"Authorization": f"Bearer {settings.paystack_secret_key}"}
+    headers = paystack_headers()
     async with httpx.AsyncClient(timeout=15) as client:
         response = await client.post("https://api.paystack.co/transferrecipient", json=payload, headers=headers)
     if response.status_code >= 400:
@@ -97,7 +108,7 @@ async def create_transfer_recipient(
 
 
 async def list_banks(*, country: str = "nigeria") -> list[dict[str, Any]]:
-    headers = {"Authorization": f"Bearer {settings.paystack_secret_key}"}
+    headers = paystack_headers()
     async with httpx.AsyncClient(timeout=15) as client:
         response = await client.get(f"https://api.paystack.co/bank?country={country}", headers=headers)
     if response.status_code >= 400:
@@ -139,7 +150,7 @@ async def initiate_transfer(
         "reason": reason,
         "currency": currency,
     }
-    headers = {"Authorization": f"Bearer {settings.paystack_secret_key}"}
+    headers = paystack_headers()
     async with httpx.AsyncClient(timeout=20) as client:
         response = await client.post("https://api.paystack.co/transfer", json=payload, headers=headers)
     if response.status_code >= 400:

@@ -17,10 +17,17 @@ from app.services.booking_management_service import create_manage_token_for_book
 logger = logging.getLogger(__name__)
 
 
-async def send_email(*, to_email: str, subject: str, text: str, html: str | None = None) -> None:
+async def send_email(
+    *,
+    to_email: str,
+    subject: str,
+    text: str,
+    html: str | None = None,
+    idempotency_key: str | None = None,
+) -> bool:
     if not settings.resend_api_key or not settings.from_email:
         logger.info("Skipping email notification because Resend is not configured")
-        return
+        return False
     payload = {
         "from": settings.from_email,
         "to": [to_email],
@@ -29,9 +36,12 @@ async def send_email(*, to_email: str, subject: str, text: str, html: str | None
         "html": html or f"<p>{text}</p>",
     }
     headers = {"Authorization": f"Bearer {settings.resend_api_key}"}
+    if idempotency_key:
+        headers["Idempotency-Key"] = idempotency_key
     async with httpx.AsyncClient(timeout=15) as client:
         response = await client.post("https://api.resend.com/emails", json=payload, headers=headers)
     response.raise_for_status()
+    return True
 
 
 async def send_password_reset_email(*, to_email: str, reset_url: str) -> None:
@@ -43,36 +53,47 @@ async def send_password_reset_email(*, to_email: str, reset_url: str) -> None:
     )
 
 
-async def send_whatsapp_template(*, to_number: str, template_name: str, body_params: list[str]) -> None:
-    if not settings.meta_whatsapp_token or not settings.meta_whatsapp_phone_number_id:
-        logger.info("Skipping WhatsApp notification because Meta Cloud API is not configured")
-        return
+async def send_whatsapp_template(*, to_number: str, template_name: str, body_params: list[str]) -> bool:
+    body = format_whatsapp_body(template_name, body_params)
+    if not settings.twilio_account_sid or not settings.twilio_auth_token or not settings.twilio_whatsapp_from_number:
+        logger.info("Skipping WhatsApp notification because Twilio is not configured")
+        return False
     payload = {
-        "messaging_product": "whatsapp",
-        "to": to_number,
-        "type": "template",
-        "template": {
-            "name": template_name,
-            "language": {"code": "en"},
-            "components": [
-                {
-                    "type": "body",
-                    "parameters": [{"type": "text", "text": value} for value in body_params],
-                }
-            ],
-        },
+        "From": f"whatsapp:{settings.twilio_whatsapp_from_number}",
+        "To": f"whatsapp:{to_number}",
+        "Body": body,
     }
-    headers = {"Authorization": f"Bearer {settings.meta_whatsapp_token}"}
-    url = f"https://graph.facebook.com/v20.0/{settings.meta_whatsapp_phone_number_id}/messages"
+    url = f"https://api.twilio.com/2010-04-01/Accounts/{settings.twilio_account_sid}/Messages.json"
     async with httpx.AsyncClient(timeout=15) as client:
-        response = await client.post(url, json=payload, headers=headers)
+        response = await client.post(url, data=payload, auth=(settings.twilio_account_sid, settings.twilio_auth_token))
     response.raise_for_status()
+    return True
 
 
-async def notification_already_sent(db: AsyncSession, booking_id, channel: str, notification_type: str) -> bool:
+def format_whatsapp_body(template_name: str, body_params: list[str]) -> str:
+    if template_name == "booking_confirmation" and len(body_params) >= 5:
+        full_name, service_name, staff_name, start_time, booking_id = body_params[:5]
+        return (
+            f"Hi {full_name}, your {service_name} appointment with {staff_name} is confirmed for {start_time}. "
+            f"Reference: {booking_id}. Deposits are non-refundable."
+        )
+    if template_name == "booking_reminder" and len(body_params) >= 3:
+        service_name, start_time, staff_name = body_params[:3]
+        return f"Reminder: Your {service_name} appointment is at {start_time} with {staff_name}."
+    return " ".join(body_params).strip()
+
+
+async def notification_already_sent(
+    db: AsyncSession,
+    booking_id,
+    recipient_type: str,
+    channel: str,
+    notification_type: str,
+) -> bool:
     result = await db.execute(
         select(NotificationLog.id).where(
             NotificationLog.booking_id == booking_id,
+            NotificationLog.recipient_type == recipient_type,
             NotificationLog.channel == channel,
             NotificationLog.type == notification_type,
             NotificationLog.status == "sent",
@@ -223,10 +244,27 @@ async def send_and_log_email(
     subject: str,
     text: str,
 ) -> bool:
-    if await notification_already_sent(db, booking.id, "email", notification_type):
+    if await notification_already_sent(db, booking.id, recipient_type, "email", notification_type):
         return False
     try:
-        await send_email(to_email=to_email, subject=subject, text=text)
+        sent = await send_email(
+            to_email=to_email,
+            subject=subject,
+            text=text,
+            idempotency_key=f"notification:{booking.id}:{recipient_type}:email:{notification_type}",
+        )
+        if not sent:
+            await log_notification(
+                db,
+                tenant_id=booking.tenant_id,
+                booking_id=booking.id,
+                recipient_type=recipient_type,
+                channel="email",
+                notification_type=notification_type,
+                status="failed",
+                error_message="Email provider is not configured",
+            )
+            return False
         await log_notification(
             db,
             tenant_id=booking.tenant_id,
@@ -262,10 +300,22 @@ async def send_and_log_whatsapp(
     template_name: str,
     body_params: list[str],
 ) -> bool:
-    if await notification_already_sent(db, booking.id, "whatsapp", notification_type):
+    if await notification_already_sent(db, booking.id, recipient_type, "whatsapp", notification_type):
         return False
     try:
-        await send_whatsapp_template(to_number=to_number, template_name=template_name, body_params=body_params)
+        sent = await send_whatsapp_template(to_number=to_number, template_name=template_name, body_params=body_params)
+        if not sent:
+            await log_notification(
+                db,
+                tenant_id=booking.tenant_id,
+                booking_id=booking.id,
+                recipient_type=recipient_type,
+                channel="whatsapp",
+                notification_type=notification_type,
+                status="failed",
+                error_message="WhatsApp provider is not configured",
+            )
+            return False
         await log_notification(
             db,
             tenant_id=booking.tenant_id,
@@ -293,7 +343,12 @@ async def send_and_log_whatsapp(
 
 async def load_booking_context(db: AsyncSession, booking: Booking) -> tuple[Tenant, Client, Service, Staff]:
     result = await db.execute(
-        select(Tenant, Client, Service, Staff).where(
+        select(Tenant, Client, Service, Staff)
+        .select_from(Tenant)
+        .join(Client, Client.tenant_id == Tenant.id)
+        .join(Service, Service.tenant_id == Tenant.id)
+        .join(Staff, Staff.tenant_id == Tenant.id)
+        .where(
             Tenant.id == booking.tenant_id,
             Client.id == booking.client_id,
             Service.id == booking.service_id,
@@ -330,6 +385,25 @@ async def load_tenant_owner(db: AsyncSession, tenant_id) -> User | None:
         )
     )
     return result.scalar_one_or_none()
+
+
+async def send_whatsapp_message(*, to_number: str, body: str) -> str | None:
+    if not settings.twilio_account_sid or not settings.twilio_auth_token or not settings.twilio_whatsapp_from_number:
+        logger.info("Skipping WhatsApp notification because Twilio is not configured")
+        return None
+    payload = {
+        "From": f"whatsapp:{settings.twilio_whatsapp_from_number}",
+        "To": f"whatsapp:{to_number}",
+        "Body": body,
+    }
+    url = f"https://api.twilio.com/2010-04-01/Accounts/{settings.twilio_account_sid}/Messages.json"
+    async with httpx.AsyncClient(timeout=15) as client:
+        response = await client.post(url, data=payload, auth=(settings.twilio_account_sid, settings.twilio_auth_token))
+    response.raise_for_status()
+    try:
+        return response.json().get("sid")
+    except Exception:
+        return None
 
 
 async def process_due_reminders(db: AsyncSession) -> int:

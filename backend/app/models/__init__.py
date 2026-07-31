@@ -6,6 +6,7 @@ from app.models.service import Service, staff_services
 from app.models.staff import Staff
 from app.models.tenant import Tenant
 from app.models.user import User
+from app.models.whatsapp import WhatsAppConversation, WhatsAppMessage
 
 __all__ = [
     "AvailabilityOverride",
@@ -20,5 +21,7 @@ __all__ = [
     "Staff",
     "Tenant",
     "User",
+    "WhatsAppConversation",
+    "WhatsAppMessage",
     "staff_services",
 ]

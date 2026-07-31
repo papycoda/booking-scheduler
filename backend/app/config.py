@@ -1,6 +1,6 @@
 from functools import lru_cache
 
-from pydantic import AnyHttpUrl, Field, field_validator
+from pydantic import AnyHttpUrl, Field, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -16,9 +16,13 @@ class Settings(BaseSettings):
     demo_admin_emails: str = Field(default="")
     resend_api_key: str | None = None
     from_email: str | None = None
-    meta_whatsapp_token: str | None = None
-    meta_whatsapp_phone_number_id: str | None = None
-    meta_whatsapp_business_account_id: str | None = None
+    twilio_account_sid: str | None = None
+    twilio_auth_token: str | None = None
+    twilio_whatsapp_from_number: str | None = None
+    whatsapp_ai_provider: str = Field(default="deterministic")
+    whatsapp_ai_api_key: str | None = None
+    whatsapp_ai_base_url: str | None = None
+    whatsapp_ai_model: str | None = None
     upload_dir: str = "backend/uploads"
     upload_base_url: str = "/uploads"
     max_inspo_images: int = 4
@@ -28,6 +32,42 @@ class Settings(BaseSettings):
     refresh_token_days: int = 7
 
     model_config = SettingsConfigDict(env_file=("backend/.env", ".env"), env_file_encoding="utf-8", extra="ignore")
+
+    @model_validator(mode="after")
+    def validate_provider_and_production_settings(self) -> "Settings":
+        has_resend_key = bool((self.resend_api_key or "").strip())
+        has_from_email = bool((self.from_email or "").strip())
+        if has_resend_key != has_from_email:
+            raise ValueError("RESEND_API_KEY and FROM_EMAIL must be configured together.")
+
+        twilio_values = (
+            self.twilio_account_sid,
+            self.twilio_auth_token,
+            self.twilio_whatsapp_from_number,
+        )
+        configured_twilio_values = sum(bool((value or "").strip()) for value in twilio_values)
+        if configured_twilio_values not in (0, len(twilio_values)):
+            raise ValueError(
+                "TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN, and TWILIO_WHATSAPP_FROM_NUMBER must be configured together."
+            )
+
+        if self.environment != "production":
+            return self
+
+        errors: list[str] = []
+        if self.demo_mode:
+            errors.append("DEMO_MODE must be false in production")
+        if str(self.frontend_url).lower().startswith("http://"):
+            errors.append("FRONTEND_URL must use HTTPS in production")
+        if not self.paystack_secret_key.strip():
+            errors.append("PAYSTACK_SECRET_KEY is required in production")
+        if not has_resend_key or not has_from_email:
+            errors.append("RESEND_API_KEY and FROM_EMAIL are required in production")
+        if "change-me" in self.secret_key.lower():
+            errors.append("SECRET_KEY must be replaced in production")
+        if errors:
+            raise ValueError("; ".join(errors))
+        return self
 
     @property
     def demo_admin_emails_list(self) -> list[str]:

@@ -7,6 +7,7 @@ import { clearAccessToken, getAccessToken } from "../lib/api";
 
 const links = [
   ["Bookings", "/dashboard"],
+  ["WhatsApp", "/dashboard/whatsapp"],
   ["Services", "/dashboard/services"],
   ["Staff", "/dashboard/staff"],
   ["Availability", "/dashboard/availability"],

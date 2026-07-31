@@ -1,16 +1,23 @@
 "use client";
 
-import { FormEvent, useEffect, useState } from "react";
+import { FormEvent, Suspense, useEffect, useState } from "react";
+import { useParams, useSearchParams } from "next/navigation";
 import { api, bookingStatusLabel, formatNgn, ManagedBooking, Slot } from "../../../../../lib/api";
 
-export default function ManageBookingPage({
-  params,
-  searchParams,
-}: {
-  params: { slug: string; bookingId: string };
-  searchParams: { token?: string };
-}) {
-  const token = searchParams.token ?? "";
+export default function ManageBookingPage() {
+  return (
+    <Suspense fallback={null}>
+      <ManageBooking />
+    </Suspense>
+  );
+}
+
+function ManageBooking() {
+  const params = useParams<{ slug: string; bookingId: string }>();
+  const searchParams = useSearchParams();
+  const slug = params.slug ?? "";
+  const bookingId = params.bookingId ?? "";
+  const token = searchParams.get("token") ?? "";
   const [booking, setBooking] = useState<ManagedBooking | null>(null);
   const [date, setDate] = useState("");
   const [slots, setSlots] = useState<Slot[]>([]);
@@ -23,12 +30,16 @@ export default function ManageBookingPage({
   const [busy, setBusy] = useState(false);
 
   async function load() {
+    if (!slug || !bookingId) {
+      setError("Manage link is incomplete.");
+      return;
+    }
     if (!token) {
       setError("Manage link is missing a token.");
       return;
     }
     try {
-      setBooking(await api.managedBooking(params.slug, params.bookingId, token));
+      setBooking(await api.managedBooking(slug, bookingId, token));
     } catch (err) {
       setError(err instanceof Error ? err.message : "Could not load booking");
     }
@@ -36,25 +47,33 @@ export default function ManageBookingPage({
 
   useEffect(() => {
     load();
-  }, [params.slug, params.bookingId, token]);
+  }, [slug, bookingId, token]);
+
+  useEffect(() => {
+    if (!booking || booking.payment_status !== "pending" || booking.payment_url || !token) return;
+    const timer = window.setInterval(() => {
+      api.managedBooking(slug, bookingId, token).then(setBooking).catch(() => undefined);
+    }, 10_000);
+    return () => window.clearInterval(timer);
+  }, [booking?.payment_status, booking?.payment_url, slug, bookingId, token]);
 
   useEffect(() => {
     setSlots([]);
     setSelectedSlot("");
     if (!booking || !date || !token) return;
     setLoadingSlots(true);
-    api.rescheduleSlots(params.slug, params.bookingId, token, date, booking.staff_id)
+    api.rescheduleSlots(slug, bookingId, token, date, booking.staff_id)
       .then(setSlots)
       .catch((err) => setError(err instanceof Error ? err.message : "Could not load slots"))
       .finally(() => setLoadingSlots(false));
-  }, [booking?.staff_id, date, params.slug, params.bookingId, token]);
+  }, [booking?.staff_id, date, slug, bookingId, token]);
 
   async function cancelBooking() {
     if (!booking || !window.confirm("Cancel this booking? Deposits are non-refundable.")) return;
     setBusy(true);
     setError("");
     try {
-      await api.cancelManagedBooking(params.slug, params.bookingId, token, cancelReason);
+      await api.cancelManagedBooking(slug, bookingId, token, cancelReason);
       setMessage("Booking cancelled. Deposit remains non-refundable.");
       await load();
     } catch (err) {
@@ -70,7 +89,7 @@ export default function ManageBookingPage({
     setBusy(true);
     setError("");
     try {
-      await api.createRescheduleRequest(params.slug, params.bookingId, token, {
+      await api.createRescheduleRequest(slug, bookingId, token, {
         start_time: selectedSlot,
         staff_id: booking?.staff_id,
         note: note || null,
@@ -111,7 +130,7 @@ export default function ManageBookingPage({
                 <strong className="mt-1 block text-sm">{booking.staff_name}</strong>
               </div>
               <div className="finance-card">
-                <p className="muted">Deposit paid</p>
+                <p className="muted">{booking.payment_status === "success" ? "Deposit paid" : "Deposit due"}</p>
                 <strong className="mt-1 block text-sm">{formatNgn(booking.deposit_amount)}</strong>
               </div>
               <div className="finance-card">
@@ -121,9 +140,32 @@ export default function ManageBookingPage({
             </div>
           )}
 
-          <p className="rounded-xl border border-[#caa26b]/35 bg-[#fffaf2] px-4 py-3 text-sm font-medium text-[#7a5424]">
-            Deposit is not refunded when you cancel or ask to move the booking.
-          </p>
+          {booking?.payment_status === "success" ? (
+            <p className="rounded-xl border border-action/20 bg-green-50 px-4 py-3 text-sm font-medium text-action">
+              Payment received. Your booking is confirmed.
+            </p>
+          ) : booking?.payment_url ? (
+            <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-[#caa26b]/35 bg-[#fffaf2] px-4 py-3">
+              <p className="text-sm font-medium text-[#7a5424]">Your booking is reserved while payment is pending.</p>
+              <a className="button rounded-xl px-4 py-2 text-sm" href={booking.payment_url}>
+                Pay deposit
+              </a>
+            </div>
+          ) : booking?.payment_status === "pending" ? (
+            <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-[#caa26b]/35 bg-[#fffaf2] px-4 py-3">
+              <p className="text-sm font-medium text-[#7a5424]">
+                Your booking is saved. We are preparing the payment link and will refresh this page automatically.
+              </p>
+              <button className="secondary-button rounded-xl px-4 py-2 text-sm" type="button" onClick={() => void load()}>
+                Check again
+              </button>
+            </div>
+          ) : null}
+          {booking?.payment_status === "success" && (
+            <p className="rounded-xl border border-[#caa26b]/35 bg-[#fffaf2] px-4 py-3 text-sm font-medium text-[#7a5424]">
+              Deposit is not refunded when you cancel or ask to move the booking.
+            </p>
+          )}
           {message && <p className="rounded-xl border border-action/20 bg-green-50 px-4 py-3 text-sm font-medium text-action">{message}</p>}
           {error && <p className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm font-medium text-red-700">{error}</p>}
         </section>

@@ -9,10 +9,19 @@ os.environ.setdefault("DATABASE_URL", "postgresql+asyncpg://user:pass@localhost/
 os.environ.setdefault("REDIS_URL", "redis://localhost:6379")
 os.environ.setdefault("PAYSTACK_SECRET_KEY", "sk_test_x")
 
-from app.services.payment_provider import build_payment_plan  # noqa: E402
+from app.config import settings  # noqa: E402
+from app.services.payment_provider import build_payment_plan, initialize_checkout_payment  # noqa: E402
 
 
 class PaymentProviderTests(unittest.TestCase):
+    def setUp(self):
+        self.original_demo_mode = settings.demo_mode
+        self.original_demo_admin_emails = settings.demo_admin_emails
+
+    def tearDown(self):
+        settings.demo_mode = self.original_demo_mode
+        settings.demo_admin_emails = self.original_demo_admin_emails
+
     def test_platform_collected_without_split_setup_caps_platform_fee(self):
         tenant = SimpleNamespace(
             payment_setup_status="not_started",
@@ -55,3 +64,26 @@ class PaymentProviderTests(unittest.TestCase):
         self.assertEqual(plan.business_net_amount, 37_000)
         self.assertEqual(plan.transaction_charge, 3_000)
         self.assertEqual(plan.bearer, "subaccount")
+
+    def test_authorized_demo_email_gets_local_payment_page(self):
+        settings.demo_mode = True
+        settings.demo_admin_emails = "demo@example.com"
+        tenant = SimpleNamespace(
+            payment_setup_status="not_started",
+            paystack_subaccount_code=None,
+            platform_fee_percentage=0,
+        )
+
+        data, _plan = __import__("asyncio").run(
+            initialize_checkout_payment(
+                email="DEMO@EXAMPLE.COM",
+                amount=5_000,
+                reference="bk_demo_reference",
+                tenant=tenant,
+                callback_url="http://localhost:3000/book/demo/verify",
+                metadata={"booking_id": "demo"},
+            )
+        )
+
+        self.assertIn("/demo/pay?", data["authorization_url"])
+        self.assertTrue(data["access_code"].startswith("demo_access_"))

@@ -18,6 +18,7 @@ from app.routers.public import router as public_router
 from app.routers.services import router as services_router
 from app.routers.staff import router as staff_router
 from app.routers.tenants import router as tenants_router
+from app.routers.whatsapp import router as whatsapp_router
 from app.routers.webhooks import router as webhooks_router
 from app.services.reminder_scheduler import start_scheduler
 
@@ -48,7 +49,7 @@ app.add_middleware(
     CORSMiddleware,
     allow_origins=allowed_origins,
     allow_credentials=True,
-    allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+    allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
     allow_headers=["Content-Type", "Authorization", "X-Tenant-ID"],
 )
 app.add_middleware(SlowAPIMiddleware)
@@ -59,6 +60,7 @@ app.include_router(staff_router, prefix="/api/v1")
 app.include_router(services_router, prefix="/api/v1")
 app.include_router(availability_router, prefix="/api/v1")
 app.include_router(public_router, prefix="/api/v1")
+app.include_router(whatsapp_router, prefix="/api/v1")
 app.include_router(webhooks_router, prefix="/api/v1")
 app.include_router(bookings_router, prefix="/api/v1")
 

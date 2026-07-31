@@ -13,7 +13,14 @@ class TenantResponse(BaseModel):
     logo_url: str | None = None
     timezone: str
     phone: str | None = None
+    whatsapp_number: str | None = None
     address: str | None = None
+    front_desk_intro: str | None = None
+    front_desk_hours: str | None = None
+    front_desk_service_areas: str | None = None
+    front_desk_prep_notes: str | None = None
+    front_desk_policies: str | None = None
+    front_desk_escalation_rules: str | None = None
     payout_bank_name: str | None = None
     payout_account_name: str | None = None
     payment_setup_status: str = "not_started"
@@ -45,7 +52,14 @@ class TenantResponse(BaseModel):
             "logo_url": tenant.logo_url,
             "timezone": tenant.timezone,
             "phone": tenant.phone,
+            "whatsapp_number": tenant.whatsapp_number,
             "address": tenant.address,
+            "front_desk_intro": tenant.front_desk_intro,
+            "front_desk_hours": tenant.front_desk_hours,
+            "front_desk_service_areas": tenant.front_desk_service_areas,
+            "front_desk_prep_notes": tenant.front_desk_prep_notes,
+            "front_desk_policies": tenant.front_desk_policies,
+            "front_desk_escalation_rules": tenant.front_desk_escalation_rules,
             "payout_bank_name": tenant.payout_bank_name,
             "payout_account_name": tenant.payout_account_name,
             "payment_setup_status": tenant.payment_setup_status,
@@ -69,7 +83,14 @@ class TenantUpdateRequest(BaseModel):
     logo_url: str | None = Field(default=None, max_length=500)
     timezone: str | None = Field(default=None, max_length=50)
     phone: str | None = Field(default=None, pattern=r"^\+?[0-9]{10,15}$")
+    whatsapp_number: str | None = Field(default=None, pattern=r"^\+?[0-9]{10,15}$")
     address: str | None = None
+    front_desk_intro: str | None = None
+    front_desk_hours: str | None = None
+    front_desk_service_areas: str | None = None
+    front_desk_prep_notes: str | None = None
+    front_desk_policies: str | None = None
+    front_desk_escalation_rules: str | None = None
     allow_staff_selection: bool | None = None
     booking_buffer_minutes: int | None = Field(default=None, ge=0, le=480)
     default_deposit_amount: int | None = Field(default=None, ge=0, le=100_000_000)

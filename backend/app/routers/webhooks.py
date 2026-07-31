@@ -1,6 +1,7 @@
 import hashlib
 import hmac
 import logging
+import base64
 from uuid import UUID
 
 from fastapi import APIRouter, BackgroundTasks, Header, Request, Query, status
@@ -15,10 +16,22 @@ from app.models.tenant import Tenant
 from app.services.notification_service import send_booking_confirmation
 from app.services.payment_provider import DEMO_ACCESS_CODE_PREFIX, verify_demo_payment_token
 from app.services.settlement_service import queue_payment_for_payout
+from app.services.whatsapp_service import handle_inbound_whatsapp_message, normalize_phone, strip_whatsapp_prefix
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/webhooks", tags=["webhooks"])
+
+
+def verify_twilio_signature(url: str, params: dict[str, str], signature: str | None) -> bool:
+    if not settings.twilio_auth_token or not signature:
+        return False
+    data = url
+    for key in sorted(params):
+        data += key + params[key]
+    digest = hmac.new(settings.twilio_auth_token.encode("utf-8"), data.encode("utf-8"), hashlib.sha1).digest()
+    expected = base64.b64encode(digest).decode("utf-8")
+    return hmac.compare_digest(expected, signature)
 
 
 @router.post("/demo/complete-payment")
@@ -160,6 +173,44 @@ async def paystack_webhook(
     except Exception:
         logger.exception("Paystack webhook processing failed")
         return JSONResponse(status_code=status.HTTP_200_OK, content={"status": "error_logged"})
+
+    return JSONResponse(status_code=status.HTTP_200_OK, content={"status": "ok"})
+
+
+@router.post("/twilio/whatsapp")
+async def twilio_whatsapp_webhook(
+    request: Request,
+    x_twilio_signature: str | None = Header(default=None, alias="X-Twilio-Signature"),
+) -> JSONResponse:
+    if not settings.twilio_auth_token:
+        return JSONResponse(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            content={"status": "twilio_not_configured"},
+        )
+    form = await request.form()
+    payload = {str(key): str(value) for key, value in form.items()}
+    if not verify_twilio_signature(str(request.url), payload, x_twilio_signature):
+        return JSONResponse(status_code=status.HTTP_403_FORBIDDEN, content={"status": "invalid_signature"})
+
+    from_number = normalize_phone(strip_whatsapp_prefix(payload.get("From")))
+    to_number = normalize_phone(strip_whatsapp_prefix(payload.get("To")))
+    body = payload.get("Body", "")
+    message_sid = payload.get("MessageSid")
+    profile_name = payload.get("ProfileName") or None
+
+    async with SessionLocal() as db:
+        tenant_result = await db.execute(select(Tenant).where(Tenant.whatsapp_number == to_number, Tenant.status == "active"))
+        tenant = tenant_result.scalar_one_or_none()
+        if tenant is None:
+            return JSONResponse(status_code=status.HTTP_200_OK, content={"status": "ignored"})
+        await handle_inbound_whatsapp_message(
+            db,
+            tenant=tenant,
+            from_number=from_number,
+            profile_name=profile_name,
+            message_sid=message_sid,
+            body=body,
+        )
 
     return JSONResponse(status_code=status.HTTP_200_OK, content={"status": "ok"})
 

@@ -18,7 +18,7 @@ from app.schemas.booking import PublicBookingCreateRequest, PublicBookingCreateR
 from app.services.availability_service import generate_available_slots, load_candidate_staff, load_service
 from app.services.booking_management_service import create_manage_token_for_booking, hash_manage_token, manage_url_for_booking
 from app.services.inspo_service import save_inspo_images
-from app.services.paystack_service import PaystackError
+from app.services.paystack_service import PaystackError, PaystackNotConfiguredError
 from app.services.payment_provider import initialize_checkout_payment
 from app.services.pricing_service import calculate_deposit_due_now, payment_type_for_service, price_status_for_service, requires_deposit_for_booking
 
@@ -62,6 +62,14 @@ async def create_public_booking(
             detail={"error": "SLOT_UNAVAILABLE", "message": "No staff member is available for this slot."},
         )
 
+    manage_token = ""
+    manage_url = ""
+    reference = ""
+    payment_url: str | None = None
+    payment_pending = False
+    payment_message: str | None = None
+    reference = ""
+
     async with db.begin_nested():
         locked_staff = await lock_staff_for_booking(db, tenant.id, assigned_staff_id, payload.service_id)
         conflict_result = await db.execute(
@@ -95,6 +103,7 @@ async def create_public_booking(
         await db.flush()
         manage_token = create_manage_token_for_booking(booking.id)
         booking.manage_token_hash = hash_manage_token(manage_token)
+        reference = f"bk_{booking.id}_{int(datetime.now(UTC).timestamp())}"
 
         inspo_assets: list[BookingInspoAsset] = []
         if inspo_images:
@@ -102,59 +111,73 @@ async def create_public_booking(
             for asset in inspo_assets:
                 db.add(asset)
 
-        reference = f"bk_{booking.id}_{int(datetime.now(UTC).timestamp())}"
-        manage_url = manage_url_for_booking(slug, booking.id, manage_token)
-        callback_url = f"{str(settings.frontend_url).rstrip('/')}/book/{slug}/verify?booking_id={booking.id}&token={manage_token}"
-        try:
-            paystack_data, payment_plan = await initialize_checkout_payment(
-                email=payload.client.email,
-                amount=deposit_amount,
-                reference=reference,
-                tenant=tenant,
-                callback_url=callback_url,
-                metadata={
-                    "booking_id": str(booking.id),
-                    "manage_url": manage_url,
-                    "tenant_id": str(tenant.id),
-                    "service_name": service.name,
-                    "staff_name": locked_staff.name,
-                    "start_time": start_utc.isoformat(),
-                    "payment_type": payment_type,
-                    "deposit_amount": str(deposit_amount),
-                },
-            )
-        except PaystackError:
-            raise HTTPException(
-                status_code=status.HTTP_502_BAD_GATEWAY,
-                detail={"error": "PAYSTACK_INIT_FAILED", "message": "Could not initialize payment."},
-            ) from None
-
         payment = Payment(
             booking_id=booking.id,
             tenant_id=tenant.id,
             amount=deposit_amount,
             currency=service.currency,
             paystack_reference=reference,
-            paystack_access_code=paystack_data.get("access_code"),
+            paystack_access_code=None,
+            checkout_url=None,
             status="pending",
             payment_type=payment_type,
-            provider=payment_plan.provider,
-            collection_mode=payment_plan.collection_mode,
-            platform_fee_amount=payment_plan.platform_fee_amount,
-            business_net_amount=payment_plan.business_net_amount,
+            provider="paystack",
+            collection_mode="platform_collected",
+            platform_fee_amount=0,
+            business_net_amount=deposit_amount,
             settlement_status="not_due",
         )
         db.add(payment)
 
     await db.commit()
-    # For demo mode, append slug and booking_id to the URL for proper redirect
-    payment_url = paystack_data["authorization_url"]
-    if payment_url and "/demo/pay?" in payment_url:
-        parsed = urlparse(payment_url)
-        query_params = parse_qs(parsed.query)
-        query_params.update({'slug': [tenant.slug], 'booking_id': [str(booking.id)], 'manage_token': [manage_token]})
-        new_query = urlencode(query_params, doseq=True)
-        payment_url = urlunsplit((parsed.scheme, parsed.netloc, parsed.path, new_query, parsed.fragment))
+    manage_url = manage_url_for_booking(slug, booking.id, manage_token)
+    callback_url = f"{str(settings.frontend_url).rstrip('/')}/book/{slug}/verify?booking_id={booking.id}&token={manage_token}"
+    try:
+        paystack_data, payment_plan = await initialize_checkout_payment(
+            email=payload.client.email,
+            amount=deposit_amount,
+            reference=reference,
+            tenant=tenant,
+            callback_url=callback_url,
+            metadata={
+                "booking_id": str(booking.id),
+                "manage_url": manage_url,
+                "tenant_id": str(tenant.id),
+                "service_name": service.name,
+                "staff_name": locked_staff.name,
+                "start_time": start_utc.isoformat(),
+                "payment_type": payment_type,
+                "deposit_amount": str(deposit_amount),
+            },
+        )
+    except PaystackNotConfiguredError:
+        payment_pending = True
+        payment_message = "Booking saved. Payment is not configured yet, so the payment link will be retried."
+    except PaystackError as exc:
+        payment_pending = True
+        payment_message = "Booking saved. I could not generate the payment link right now, but the team can retry it."
+        payment.initialization_error = str(exc)
+        payment.initialization_attempts = (payment.initialization_attempts or 0) + 1
+        payment.last_initialization_attempt_at = datetime.now(UTC)
+        await db.commit()
+    else:
+        payment_url = paystack_data["authorization_url"]
+        if payment_url and "/demo/pay?" in payment_url:
+            parsed = urlparse(payment_url)
+            query_params = parse_qs(parsed.query)
+            query_params.update({"slug": [tenant.slug], "booking_id": [str(booking.id)], "manage_token": [manage_token]})
+            new_query = urlencode(query_params, doseq=True)
+            payment_url = urlunsplit((parsed.scheme, parsed.netloc, parsed.path, new_query, parsed.fragment))
+        payment.paystack_access_code = paystack_data.get("access_code")
+        payment.checkout_url = payment_url
+        payment.provider = payment_plan.provider
+        payment.collection_mode = payment_plan.collection_mode
+        payment.platform_fee_amount = payment_plan.platform_fee_amount
+        payment.business_net_amount = payment_plan.business_net_amount
+        payment.initialization_error = None
+        payment.initialization_attempts = (payment.initialization_attempts or 0) + 1
+        payment.last_initialization_attempt_at = datetime.now(UTC)
+        await db.commit()
     return PublicBookingCreateResponse(
         booking_id=booking.id,
         payment_url=payment_url,
@@ -162,6 +185,8 @@ async def create_public_booking(
         deposit_amount=deposit_amount,
         manage_url=manage_url,
         expires_at=datetime.now(UTC) + timedelta(minutes=15),
+        payment_pending=payment_pending,
+        payment_message=payment_message,
     )
 
 

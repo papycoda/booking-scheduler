@@ -27,11 +27,13 @@ class PublicBookingCreateRequest(BaseModel):
 
 class PublicBookingCreateResponse(BaseModel):
     booking_id: UUID
-    payment_url: str
+    payment_url: str | None
     reference: str
     expires_at: datetime
     deposit_amount: int
     manage_url: str
+    payment_pending: bool = False
+    payment_message: str | None = None
 
 
 class PublicBookingStatusResponse(BaseModel):
@@ -65,6 +67,7 @@ class PublicManagedBookingResponse(BaseModel):
     booking_id: UUID
     booking_status: str
     payment_status: str | None = None
+    payment_url: str | None = None
     start_time: datetime
     end_time: datetime
     service_id: UUID

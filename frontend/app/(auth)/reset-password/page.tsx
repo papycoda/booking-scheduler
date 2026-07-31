@@ -1,15 +1,26 @@
 "use client";
 
-import { FormEvent, useState } from "react";
+import { FormEvent, Suspense, useState } from "react";
 import Link from "next/link";
+import { useSearchParams } from "next/navigation";
 import { api } from "../../../lib/api";
 import { AuthShell } from "../../../components/AuthShell";
 
-export default function ResetPasswordPage({ searchParams }: { searchParams: { token?: string } }) {
+export default function ResetPasswordPage() {
+  return (
+    <Suspense fallback={null}>
+      <ResetPasswordForm />
+    </Suspense>
+  );
+}
+
+function ResetPasswordForm() {
+  const searchParams = useSearchParams();
+  const token = searchParams.get("token") ?? "";
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const hasToken = searchParams.token;
+  const hasToken = Boolean(token);
 
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -19,7 +30,7 @@ export default function ResetPasswordPage({ searchParams }: { searchParams: { to
     const form = new FormData(event.currentTarget);
     try {
       await api.resetPassword({
-        token: searchParams.token ?? form.get("token"),
+        token: token || form.get("token"),
         new_password: form.get("new_password"),
       });
       setMessage("Password updated successfully. You can now sign in with your new password.");

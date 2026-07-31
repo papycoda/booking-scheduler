@@ -29,6 +29,37 @@ class FakeResult:
         return FakeScalarResult(self.rows)
 
 
+class FakeOneResult:
+    def __init__(self, value):
+        self.value = value
+
+    def scalar_one_or_none(self):
+        return self.value
+
+
+class CapturingSession:
+    def __init__(self, value=None):
+        self.value = value
+        self.statement = None
+
+    async def execute(self, statement):
+        self.statement = statement
+        return FakeOneResult(self.value)
+
+
+class LoggingSession(CapturingSession):
+    def __init__(self):
+        super().__init__()
+        self.added = []
+        self.committed = False
+
+    def add(self, item):
+        self.added.append(item)
+
+    async def commit(self):
+        self.committed = True
+
+
 class FakeSession:
     def __init__(self, rows):
         self.rows = rows
@@ -54,8 +85,8 @@ class FakeAsyncClient:
     async def __aexit__(self, exc_type, exc, tb):
         return False
 
-    async def post(self, url, *, json, headers):
-        self.calls.append({"url": url, "json": json, "headers": headers, "timeout": self.timeout})
+    async def post(self, url, *, json=None, data=None, headers=None, auth=None):
+        self.calls.append({"url": url, "json": json, "data": data, "headers": headers, "auth": auth, "timeout": self.timeout})
         return FakeResponse()
 
 
@@ -65,8 +96,9 @@ class NotificationServiceTests(unittest.IsolatedAsyncioTestCase):
         self.original_client = svc.httpx.AsyncClient
         self.original_resend_api_key = svc.settings.resend_api_key
         self.original_from_email = svc.settings.from_email
-        self.original_meta_whatsapp_token = svc.settings.meta_whatsapp_token
-        self.original_meta_whatsapp_phone_number_id = svc.settings.meta_whatsapp_phone_number_id
+        self.original_twilio_account_sid = svc.settings.twilio_account_sid
+        self.original_twilio_auth_token = svc.settings.twilio_auth_token
+        self.original_twilio_whatsapp_from_number = svc.settings.twilio_whatsapp_from_number
         FakeAsyncClient.calls = []
 
     def tearDown(self) -> None:
@@ -74,8 +106,9 @@ class NotificationServiceTests(unittest.IsolatedAsyncioTestCase):
         svc.httpx.AsyncClient = self.original_client
         svc.settings.resend_api_key = self.original_resend_api_key
         svc.settings.from_email = self.original_from_email
-        svc.settings.meta_whatsapp_token = self.original_meta_whatsapp_token
-        svc.settings.meta_whatsapp_phone_number_id = self.original_meta_whatsapp_phone_number_id
+        svc.settings.twilio_account_sid = self.original_twilio_account_sid
+        svc.settings.twilio_auth_token = self.original_twilio_auth_token
+        svc.settings.twilio_whatsapp_from_number = self.original_twilio_whatsapp_from_number
 
     async def test_process_due_reminders_counts_only_sent_reminders(self):
         booking_a = SimpleNamespace(id=uuid4())
@@ -91,18 +124,36 @@ class NotificationServiceTests(unittest.IsolatedAsyncioTestCase):
 
         self.assertEqual(sent_count, 2)
 
+    async def test_notification_dedupe_is_scoped_to_recipient(self):
+        db = CapturingSession()
+
+        was_sent = await svc.notification_already_sent(
+            db,
+            uuid4(),
+            "owner",
+            "email",
+            "booking_confirmation",
+        )
+
+        self.assertFalse(was_sent)
+        sql = str(db.statement)
+        self.assertIn("notification_log.recipient_type", sql)
+        self.assertIn("notification_log.channel", sql)
+        self.assertIn("notification_log.type", sql)
+
     async def test_send_email_posts_resend_payload(self):
         svc.httpx.AsyncClient = FakeAsyncClient
         svc.settings.resend_api_key = "re_test"
         svc.settings.from_email = "bookings@example.com"
 
-        await svc.send_email(
+        sent = await svc.send_email(
             to_email="client@example.com",
             subject="Booking confirmed",
             text="Your appointment is confirmed.",
             html="<p>Your appointment is confirmed.</p>",
         )
 
+        self.assertTrue(sent)
         self.assertEqual(len(FakeAsyncClient.calls), 1)
         call = FakeAsyncClient.calls[0]
         self.assertEqual(call["url"], "https://api.resend.com/emails")
@@ -113,23 +164,69 @@ class NotificationServiceTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(call["json"]["text"], "Your appointment is confirmed.")
         self.assertEqual(call["json"]["html"], "<p>Your appointment is confirmed.</p>")
 
-    async def test_send_whatsapp_template_posts_meta_payload(self):
+    async def test_logged_email_uses_recipient_scoped_provider_idempotency(self):
         svc.httpx.AsyncClient = FakeAsyncClient
-        svc.settings.meta_whatsapp_token = "meta_test"
-        svc.settings.meta_whatsapp_phone_number_id = "123456"
+        svc.settings.resend_api_key = "re_test"
+        svc.settings.from_email = "bookings@example.com"
+        booking = SimpleNamespace(id=uuid4(), tenant_id=uuid4())
+        db = LoggingSession()
 
-        await svc.send_whatsapp_template(
+        sent = await svc.send_and_log_email(
+            db,
+            booking=booking,
+            recipient_type="owner",
+            notification_type="booking_confirmation",
+            to_email="owner@example.com",
+            subject="New booking",
+            text="A customer booked.",
+        )
+
+        self.assertTrue(sent)
+        self.assertEqual(
+            FakeAsyncClient.calls[0]["headers"]["Idempotency-Key"],
+            f"notification:{booking.id}:owner:email:booking_confirmation",
+        )
+
+    async def test_send_whatsapp_template_posts_twilio_payload(self):
+        svc.httpx.AsyncClient = FakeAsyncClient
+        svc.settings.twilio_account_sid = "AC123"
+        svc.settings.twilio_auth_token = "auth_test"
+        svc.settings.twilio_whatsapp_from_number = "+2349000000000"
+
+        sent = await svc.send_whatsapp_template(
             to_number="+2348000000000",
             template_name="booking_confirmation",
             body_params=["Ada", "Braids", "Mina", "2026-06-01T10:00:00Z", "booking-id"],
         )
 
+        self.assertTrue(sent)
         self.assertEqual(len(FakeAsyncClient.calls), 1)
         call = FakeAsyncClient.calls[0]
-        self.assertEqual(call["url"], "https://graph.facebook.com/v20.0/123456/messages")
-        self.assertEqual(call["headers"]["Authorization"], "Bearer meta_test")
-        self.assertEqual(call["json"]["messaging_product"], "whatsapp")
-        self.assertEqual(call["json"]["to"], "+2348000000000")
-        self.assertEqual(call["json"]["template"]["name"], "booking_confirmation")
-        params = call["json"]["template"]["components"][0]["parameters"]
-        self.assertEqual([param["text"] for param in params], ["Ada", "Braids", "Mina", "2026-06-01T10:00:00Z", "booking-id"])
+        self.assertEqual(call["url"], "https://api.twilio.com/2010-04-01/Accounts/AC123/Messages.json")
+        self.assertEqual(call["data"]["From"], "whatsapp:+2349000000000")
+        self.assertEqual(call["data"]["To"], "whatsapp:+2348000000000")
+        self.assertIn("Ada", call["data"]["Body"])
+        self.assertEqual(call["auth"], ("AC123", "auth_test"))
+
+    async def test_unconfigured_email_is_logged_as_failed_not_sent(self):
+        svc.settings.resend_api_key = None
+        svc.settings.from_email = None
+        booking = SimpleNamespace(id=uuid4(), tenant_id=uuid4())
+        db = LoggingSession()
+
+        sent = await svc.send_and_log_email(
+            db,
+            booking=booking,
+            recipient_type="owner",
+            notification_type="booking_confirmation",
+            to_email="owner@example.com",
+            subject="New booking",
+            text="A customer booked.",
+        )
+
+        self.assertFalse(sent)
+        self.assertTrue(db.committed)
+        self.assertEqual(len(db.added), 1)
+        self.assertEqual(db.added[0].status, "failed")
+        self.assertEqual(db.added[0].recipient_type, "owner")
+        self.assertEqual(db.added[0].error_message, "Email provider is not configured")

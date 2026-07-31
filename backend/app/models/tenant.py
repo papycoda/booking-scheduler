@@ -1,7 +1,7 @@
 from datetime import datetime
 from decimal import Decimal
 
-from sqlalchemy import Boolean, CheckConstraint, DateTime, Index, Integer, Numeric, String, Text, text
+from sqlalchemy import Boolean, CheckConstraint, DateTime, Index, Integer, Numeric, String, Text, UniqueConstraint, text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.database import Base
@@ -15,6 +15,7 @@ class Tenant(UUIDPrimaryKeyMixin, Base):
         CheckConstraint("platform_fee_percentage >= 0 AND platform_fee_percentage <= 30", name="ck_tenants_platform_fee_range"),
         CheckConstraint("default_deposit_amount >= 0", name="ck_tenants_default_deposit_nonnegative"),
         CheckConstraint("payment_setup_status IN ('not_started', 'bank_added', 'split_ready')", name="ck_tenants_payment_setup_status"),
+        UniqueConstraint("whatsapp_number", name="uq_tenants_whatsapp_number"),
         Index("idx_tenants_slug", "slug"),
     )
 
@@ -24,7 +25,14 @@ class Tenant(UUIDPrimaryKeyMixin, Base):
     logo_url: Mapped[str | None] = mapped_column(String(500))
     timezone: Mapped[str] = mapped_column(String(50), nullable=False, server_default="Africa/Lagos")
     phone: Mapped[str | None] = mapped_column(String(20))
+    whatsapp_number: Mapped[str | None] = mapped_column(String(20))
     address: Mapped[str | None] = mapped_column(Text)
+    front_desk_intro: Mapped[str | None] = mapped_column(Text)
+    front_desk_hours: Mapped[str | None] = mapped_column(Text)
+    front_desk_service_areas: Mapped[str | None] = mapped_column(Text)
+    front_desk_prep_notes: Mapped[str | None] = mapped_column(Text)
+    front_desk_policies: Mapped[str | None] = mapped_column(Text)
+    front_desk_escalation_rules: Mapped[str | None] = mapped_column(Text)
     paystack_subaccount_code: Mapped[str | None] = mapped_column(String(100))
     paystack_business_name: Mapped[str | None] = mapped_column(String(255))
     payout_bank_code: Mapped[str | None] = mapped_column(String(20))

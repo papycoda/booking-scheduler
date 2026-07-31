@@ -44,11 +44,14 @@ class FakeAsyncClient:
 class PaystackServiceTests(unittest.IsolatedAsyncioTestCase):
     def setUp(self) -> None:
         self.original_client = svc.httpx.AsyncClient
+        self.original_secret_key = svc.settings.paystack_secret_key
         FakeAsyncClient.calls = []
         svc.httpx.AsyncClient = FakeAsyncClient
+        svc.settings.paystack_secret_key = "sk_test_x"
 
     def tearDown(self) -> None:
         svc.httpx.AsyncClient = self.original_client
+        svc.settings.paystack_secret_key = self.original_secret_key
 
     async def test_initialize_transaction_sends_split_payload_and_idempotency_header(self):
         data = await svc.initialize_transaction(
@@ -69,3 +72,19 @@ class PaystackServiceTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(call["json"]["subaccount"], "ACCT_test")
         self.assertEqual(call["headers"]["X-Idempotency-Key"], "bk_reference")
         self.assertEqual(call["headers"]["Authorization"], "Bearer sk_test_x")
+
+    async def test_initialize_transaction_rejects_missing_secret_key_before_http(self):
+        svc.settings.paystack_secret_key = ""
+
+        with self.assertRaises(svc.PaystackNotConfiguredError):
+            await svc.initialize_transaction(
+                email="chioma@example.com",
+                amount=10_000,
+                reference="bk_reference",
+                subaccount=None,
+                transaction_charge=0,
+                callback_url="http://localhost:3000/book/ada/verify?booking_id=123",
+                metadata={"booking_id": "123"},
+            )
+
+        self.assertEqual(FakeAsyncClient.calls, [])

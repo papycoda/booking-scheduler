@@ -2,6 +2,23 @@ const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:8
 
 type ApiOptions = RequestInit & { token?: string };
 
+export type ApiFieldError = {
+  field: string;
+  message: string;
+};
+
+export class ApiError extends Error {
+  code?: string;
+  fieldErrors: ApiFieldError[];
+
+  constructor(message: string, code?: string, fieldErrors: ApiFieldError[] = []) {
+    super(message);
+    this.name = "ApiError";
+    this.code = code;
+    this.fieldErrors = fieldErrors;
+  }
+}
+
 async function request<T>(path: string, options: ApiOptions = {}): Promise<T> {
   const headers = new Headers(options.headers);
   if (!(options.body instanceof FormData)) headers.set("Content-Type", "application/json");
@@ -19,7 +36,22 @@ async function request<T>(path: string, options: ApiOptions = {}): Promise<T> {
       window.location.replace(`/login?next=${next}`);
     }
     const detail = body?.detail;
-    throw new Error((typeof detail === "object" && detail?.message) || (typeof detail === "string" ? detail : "Request failed"));
+    const errorBody = typeof detail === "object" && detail !== null ? detail : body;
+    const message =
+      (typeof errorBody?.message === "string" && errorBody.message) ||
+      (typeof detail === "string" ? detail : "Request failed");
+    const code = typeof errorBody?.error === "string" ? errorBody.error : undefined;
+    const fieldErrors = Array.isArray(errorBody?.fields)
+      ? errorBody.fields.filter((item: unknown): item is ApiFieldError => {
+          return (
+            typeof item === "object" &&
+            item !== null &&
+            typeof (item as ApiFieldError).field === "string" &&
+            typeof (item as ApiFieldError).message === "string"
+          );
+        })
+      : [];
+    throw new ApiError(message, code, fieldErrors);
   }
   if (response.status === 204) return undefined as T;
   return response.json() as Promise<T>;
@@ -58,7 +90,14 @@ export type Tenant = {
   logo_url?: string | null;
   timezone: string;
   phone?: string | null;
+  whatsapp_number?: string | null;
   address?: string | null;
+  front_desk_intro?: string | null;
+  front_desk_hours?: string | null;
+  front_desk_service_areas?: string | null;
+  front_desk_prep_notes?: string | null;
+  front_desk_policies?: string | null;
+  front_desk_escalation_rules?: string | null;
   payout_bank_name?: string | null;
   payout_account_name?: string | null;
   masked_payout_account_number?: string | null;
@@ -109,6 +148,37 @@ export type AssistantResponse = {
   suggested_actions: AssistantAction[];
 };
 
+export type WhatsAppConversation = {
+  id: string;
+  tenant_id: string;
+  customer_phone: string;
+  customer_name?: string | null;
+  state: string;
+  status: string;
+  summary?: string | null;
+  last_message_at?: string | null;
+  last_inbound_at?: string | null;
+  last_outbound_at?: string | null;
+  booking_id?: string | null;
+  assigned_user_id?: string | null;
+};
+
+export type WhatsAppMessage = {
+  id: string;
+  direction: string;
+  author_type: string;
+  body: string;
+  status: string;
+  provider_message_id?: string | null;
+  sent_at?: string | null;
+  created_at: string;
+};
+
+export type WhatsAppConversationDetail = WhatsAppConversation & {
+  booking_context: Record<string, unknown>;
+  messages: WhatsAppMessage[];
+};
+
 export type DashboardBooking = {
   id: string;
   payment_id?: string | null;
@@ -138,6 +208,7 @@ export type ManagedBooking = {
   booking_id: string;
   booking_status: string;
   payment_status?: string | null;
+  payment_url?: string | null;
   start_time: string;
   end_time: string;
   service_id: string;
@@ -342,7 +413,7 @@ export const api = {
     return request<Slot[]>(`/book/${slug}/slots?${params}`);
   },
   createBooking: (slug: string, body: unknown) =>
-    request<{ booking_id: string; payment_url: string; reference: string; expires_at: string; deposit_amount: number; manage_url: string }>(`/book/${slug}/bookings`, {
+    request<{ booking_id: string; payment_url?: string | null; reference: string; expires_at: string; deposit_amount: number; manage_url: string; payment_pending?: boolean; payment_message?: string | null }>(`/book/${slug}/bookings`, {
       method: "POST",
       body: body instanceof FormData ? body : JSON.stringify(body),
     }),
@@ -367,6 +438,18 @@ export const api = {
     }),
   dashboardBookings: (token = getAccessToken()) => request<DashboardBooking[]>("/dashboard/bookings", { token }),
   dashboardRescheduleRequests: (token = getAccessToken()) => request<DashboardRescheduleRequest[]>("/dashboard/reschedule-requests", { token }),
+  whatsappConversations: (status?: string, token = getAccessToken()) =>
+    request<WhatsAppConversation[]>(`/dashboard/whatsapp/conversations${status ? `?status_filter=${encodeURIComponent(status)}` : ""}`, { token }),
+  whatsappConversation: (conversationId: string, token = getAccessToken()) =>
+    request<WhatsAppConversationDetail>(`/dashboard/whatsapp/conversations/${conversationId}`, { token }),
+  whatsappClaimConversation: (conversationId: string, token = getAccessToken()) =>
+    request<WhatsAppConversation>(`/dashboard/whatsapp/conversations/${conversationId}/claim`, { method: "POST", token }),
+  whatsappReplyConversation: (conversationId: string, body: { body: string }, token = getAccessToken()) =>
+    request<{ conversation_id: string; message_id: string; status: string }>(`/dashboard/whatsapp/conversations/${conversationId}/reply`, {
+      method: "POST",
+      body: JSON.stringify(body),
+      token,
+    }),
   decideRescheduleRequest: (requestId: string, body: unknown, token = getAccessToken()) =>
     request<void>(`/dashboard/reschedule-requests/${requestId}/decision`, { method: "POST", body: JSON.stringify(body), token }),
   dashboardAnalytics: (token = getAccessToken()) => request<AnalyticsOverview>("/dashboard/analytics/overview", { token }),

@@ -71,6 +71,7 @@ async def get_managed_booking(
         booking_id=booking.id,
         booking_status=booking.status,
         payment_status=payment.status if payment else None,
+        payment_url=payment.checkout_url if payment and payment.status == "pending" else None,
         start_time=booking.start_time,
         end_time=booking.end_time,
         service_id=service.id,

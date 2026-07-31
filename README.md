@@ -92,9 +92,9 @@ Now open `.env` in a text editor and fill in your details:
 | `PAYSTACK_WEBHOOK_SECRET` | Your Paystack webhook secret | From [Paystack Dashboard → Settings → API Keys → Webhook](https://dashboard.paystack.co/#/settings/keys) |
 | `RESEND_API_KEY` | Your Resend API key | From [Resend Dashboard → API Keys](https://resend.com/api-keys) (optional) |
 | `FROM_EMAIL` | Sender email address | Your verified email in Resend (optional) |
-| `META_WHATSAPP_TOKEN` | WhatsApp access token | From Meta Developer Portal (optional) |
-| `META_WHATSAPP_PHONE_NUMBER_ID` | WhatsApp phone number ID | From Meta Developer Portal (optional) |
-| `META_WHATSAPP_BUSINESS_ACCOUNT_ID` | Business account ID | From Meta Developer Portal (optional) |
+| `TWILIO_ACCOUNT_SID` | Twilio account SID | From the Twilio Console (optional until WhatsApp is connected) |
+| `TWILIO_AUTH_TOKEN` | Twilio auth token used for sending and webhook verification | From the Twilio Console |
+| `TWILIO_WHATSAPP_FROM_NUMBER` | Twilio WhatsApp sender in E.164 format | From the Twilio WhatsApp Sandbox or approved sender |
 
 ### Step 4: Set Up the Database
 
@@ -240,9 +240,9 @@ PAYSTACK_WEBHOOK_SECRET=your-paystack-webhook-secret
 RESEND_API_KEY=your-resend-api-key
 FROM_EMAIL=noreply@yourdomain.com
 # Optional: WhatsApp
-META_WHATSAPP_TOKEN=
-META_WHATSAPP_PHONE_NUMBER_ID=
-META_WHATSAPP_BUSINESS_ACCOUNT_ID=
+TWILIO_ACCOUNT_SID=
+TWILIO_AUTH_TOKEN=
+TWILIO_WHATSAPP_FROM_NUMBER=
 ```
 
 ### Step 3: Start PostgreSQL and Redis

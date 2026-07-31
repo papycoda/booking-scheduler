@@ -2,21 +2,16 @@
 
 import { FormEvent, useEffect, useRef, useState } from "react";
 import { useParams } from "next/navigation";
-import { api, AssistantAction, formatNgn, Service, Slot, Staff, Tenant } from "../../../lib/api";
-
-type GuideMessage = {
-  id: string;
-  role: "customer" | "assistant";
-  text: string;
-  actions?: AssistantAction[];
-};
-
-const QUICK_ASSISTANT_MESSAGES = [
-  "What services do you offer?",
-  "Do I need to pay deposit?",
-  "Are you available tomorrow?",
-  "Where are you located?",
-];
+import { ApiError, api, formatNgn, Service, Slot, Staff, Tenant } from "../../../lib/api";
+import {
+  validateEmail,
+  validatePhone,
+  validateName,
+  validateInspoImages,
+  formatApiError,
+  getFieldError,
+  type ValidationResult,
+} from "../../../lib/validations";
 
 function PlantLeft() {
   return (
@@ -80,6 +75,14 @@ function addDays(date: Date, days: number) {
   return next;
 }
 
+function bookingFieldName(field: string) {
+  if (field === "client.full_name") return "full_name";
+  if (field === "client.email") return "email";
+  if (field === "client.phone") return "phone";
+  if (field === "client.whatsapp_number") return "whatsapp_number";
+  return field;
+}
+
 export default function PublicBookingPage() {
   const params = useParams<{ slug: string }>();
   const slug = params.slug ?? "";
@@ -101,11 +104,7 @@ export default function PublicBookingPage() {
   const [slotsLoading, setSlotsLoading] = useState(false);
   const [submitLoading, setSubmitLoading] = useState(false);
   const [error, setError] = useState("");
-  const [guideOpen, setGuideOpen] = useState(false);
-  const [guideMessages, setGuideMessages] = useState<GuideMessage[]>([]);
-  const [guideDraft, setGuideDraft] = useState("");
-  const [guideLoading, setGuideLoading] = useState(false);
-  const [guideError, setGuideError] = useState("");
+  const [fieldErrors, setFieldErrors] = useState<Map<string, string>>(new Map());
   const selectedService = services.find((service) => service.id === serviceId);
   const selectedStaff = staff.find((member) => member.id === staffId);
   const minDate = formatDateInput(new Date());
@@ -154,24 +153,128 @@ export default function PublicBookingPage() {
       .finally(() => setSlotsLoading(false));
   }, [slug, serviceId, staffId, date, dateValidationError]);
 
+  // Field-level validation on blur
+  function validateField(fieldName: string, value: string) {
+    const errors = new Map(fieldErrors);
+    let result: ValidationResult;
+
+    switch (fieldName) {
+      case "full_name":
+        result = validateName(value);
+        break;
+      case "email":
+        result = validateEmail(value);
+        break;
+      case "phone":
+        if (!value) {
+          const nextErrors = new Map(fieldErrors);
+          nextErrors.delete("phone");
+          setFieldErrors(nextErrors);
+          return;
+        }
+        result = validatePhone(value);
+        break;
+      case "whatsapp_number":
+        if (!value) {
+          const nextErrors = new Map(fieldErrors);
+          nextErrors.delete("whatsapp_number");
+          setFieldErrors(nextErrors);
+          return;
+        }
+        result = validatePhone(value, "whatsapp_number");
+        break;
+      default:
+        return;
+    }
+
+    if (result.valid) {
+      errors.delete(fieldName);
+    } else {
+      const msg = getFieldError(result, fieldName);
+      if (msg) errors.set(fieldName, msg);
+    }
+    setFieldErrors(errors);
+  }
+
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (!slug) {
       setError("Invalid booking link");
       return;
     }
+
+    // Clear previous errors
     setError("");
+    setFieldErrors(new Map());
+
+    // Validate all fields
+    const errors = new Map<string, string>();
+
+    // Validate name
+    const nameResult = validateName(fullName);
+    if (!nameResult.valid) {
+      nameResult.errors.forEach(e => errors.set(e.field, e.message));
+    }
+
+    // Validate email
+    const emailResult = validateEmail(email);
+    if (!emailResult.valid) {
+      emailResult.errors.forEach(e => errors.set(e.field, e.message));
+    }
+
+    // Validate phone (if provided)
+    if (phone) {
+      const phoneResult = validatePhone(phone);
+      if (!phoneResult.valid) {
+        phoneResult.errors.forEach(e => errors.set(e.field, e.message));
+      }
+    }
+
+    // Validate WhatsApp number (if provided)
+    if (whatsappNumber) {
+      const whatsappResult = validatePhone(whatsappNumber, "whatsapp_number");
+      if (!whatsappResult.valid) {
+        whatsappResult.errors.forEach(e => errors.set(e.field, e.message));
+      }
+    }
+
+    // Validate images (if provided)
+    if (inspoImages && inspoImages.length > 0) {
+      const imagesResult = validateInspoImages(inspoImages);
+      if (!imagesResult.valid) {
+        imagesResult.errors.forEach(e => errors.set(e.field, e.message));
+      }
+    }
+
+    if (errors.size > 0) {
+      setFieldErrors(errors);
+      setError("Please fix the errors below and try again.");
+      return;
+    }
+
     setSubmitLoading(true);
     try {
+      // Normalize start_time with UTC timezone marker
+      const startTimeWithTimezone = slot ? new Date(slot).toISOString() : "";
+      if (!startTimeWithTimezone.endsWith("Z") && !startTimeWithTimezone.includes("+")) {
+        // Ensure UTC timezone if not present
+        const slotDate = new Date(slot);
+        slotDate.setMilliseconds(0); // Clear milliseconds for consistency
+      }
+
+      // Clean phone numbers: remove spaces and dashes
+      const cleanPhone = phone ? phone.replace(/[\s-]/g, "") : null;
+      const cleanWhatsapp = whatsappNumber ? whatsappNumber.replace(/[\s-]/g, "") : null;
+
       const payload = {
         service_id: serviceId,
         staff_id: staffId || null,
-        start_time: slot,
+        start_time: startTimeWithTimezone,
         client: {
           full_name: fullName,
           email,
-          phone: phone || null,
-          whatsapp_number: whatsappNumber || null,
+          phone: cleanPhone,
+          whatsapp_number: cleanWhatsapp,
         },
         notes: notes || null,
       };
@@ -179,67 +282,17 @@ export default function PublicBookingPage() {
       body.set("payload", JSON.stringify(payload));
       Array.from(inspoImages ?? []).forEach((file) => body.append("inspo_images", file));
       const response = await api.createBooking(slug, body);
-      window.location.href = response.payment_url;
+      window.location.href = response.payment_url || response.manage_url;
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Unable to create booking");
+      if (err instanceof ApiError && err.fieldErrors.length > 0) {
+        const apiErrors = new Map<string, string>();
+        err.fieldErrors.forEach((fieldError) => apiErrors.set(bookingFieldName(fieldError.field), fieldError.message));
+        setFieldErrors(apiErrors);
+      }
+      setError(formatApiError(err));
     } finally {
       setSubmitLoading(false);
     }
-  }
-
-  function scrollToBooking() {
-    bookingSectionRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
-  }
-
-  function handleAssistantAction(action: AssistantAction) {
-    if ((action.type === "view_service" || action.type === "show_slots") && action.service_id) {
-      setServiceId(action.service_id);
-    }
-    if (action.type === "show_slots" && action.start_time) {
-      setSlot(action.start_time);
-    }
-    scrollToBooking();
-  }
-
-  async function sendAssistantMessage(rawMessage: string) {
-    const message = rawMessage.trim();
-    if (!message || !slug || guideLoading) return;
-    const customerMessage: GuideMessage = {
-      id: `${Date.now()}-customer`,
-      role: "customer",
-      text: message,
-    };
-    setGuideMessages((current) => [...current, customerMessage]);
-    setGuideDraft("");
-    setGuideError("");
-    setGuideLoading(true);
-    try {
-      const response = await api.assistant(slug, {
-        message,
-        context: {
-          service_id: serviceId || null,
-          selected_date: date || null,
-        },
-      });
-      setGuideMessages((current) => [
-        ...current,
-        {
-          id: `${Date.now()}-assistant`,
-          role: "assistant",
-          text: response.reply,
-          actions: response.suggested_actions,
-        },
-      ]);
-    } catch {
-      setGuideError("I could not answer that right now. You can continue with the booking page.");
-    } finally {
-      setGuideLoading(false);
-    }
-  }
-
-  function submitGuideMessage(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    void sendAssistantMessage(guideDraft);
   }
 
   return (
@@ -370,10 +423,56 @@ export default function PublicBookingPage() {
           <section className="grid gap-6">
             <StepHeader number="2" title="Your details" subtitle="Step 2 of 2" icon="person" />
             <div className="grid gap-5 md:grid-cols-2">
-              <input className="rounded-xl bg-[#f8faf9]" name="full_name" placeholder="Full name" value={fullName} onChange={(event) => setFullName(event.target.value)} required />
-              <input className="rounded-xl bg-[#f8faf9]" name="email" type="email" placeholder="Email" value={email} onChange={(event) => setEmail(event.target.value)} required />
-              <input className="rounded-xl bg-[#f8faf9]" name="phone" placeholder="Phone" value={phone} onChange={(event) => setPhone(event.target.value)} />
-              <input className="rounded-xl bg-[#f8faf9]" name="whatsapp_number" placeholder="WhatsApp number" value={whatsappNumber} onChange={(event) => setWhatsappNumber(event.target.value)} />
+              <div className="grid gap-1">
+                <input
+                  className="rounded-xl bg-[#f8faf9]"
+                  name="full_name"
+                  placeholder="Full name"
+                  value={fullName}
+                  onChange={(event) => setFullName(event.target.value)}
+                  onBlur={() => validateField("full_name", fullName)}
+                  required
+                />
+                {fieldErrors.get("full_name") && <p className="text-xs font-semibold text-red-700">{fieldErrors.get("full_name")}</p>}
+              </div>
+
+              <div className="grid gap-1">
+                <input
+                  className="rounded-xl bg-[#f8faf9]"
+                  name="email"
+                  type="email"
+                  placeholder="Email"
+                  value={email}
+                  onChange={(event) => setEmail(event.target.value)}
+                  onBlur={() => validateField("email", email)}
+                  required
+                />
+                {fieldErrors.get("email") && <p className="text-xs font-semibold text-red-700">{fieldErrors.get("email")}</p>}
+              </div>
+
+              <div className="grid gap-1">
+                <input
+                  className="rounded-xl bg-[#f8faf9]"
+                  name="phone"
+                  placeholder="Phone (optional)"
+                  value={phone}
+                  onChange={(event) => setPhone(event.target.value)}
+                  onBlur={() => validateField("phone", phone)}
+                />
+                {fieldErrors.get("phone") && <p className="text-xs font-semibold text-red-700">{fieldErrors.get("phone")}</p>}
+              </div>
+
+              <div className="grid gap-1">
+                <input
+                  className="rounded-xl bg-[#f8faf9]"
+                  name="whatsapp_number"
+                  placeholder="WhatsApp number (optional)"
+                  value={whatsappNumber}
+                  onChange={(event) => setWhatsappNumber(event.target.value)}
+                  onBlur={() => validateField("whatsapp_number", whatsappNumber)}
+                />
+                {fieldErrors.get("whatsapp_number") && <p className="text-xs font-semibold text-red-700">{fieldErrors.get("whatsapp_number")}</p>}
+              </div>
 
               <label className="group relative flex h-32 cursor-pointer flex-col items-center justify-center overflow-hidden rounded-xl border-2 border-dashed border-[#b9ccbf] bg-[#f8faf9] transition hover:border-action hover:bg-[#eff3f0] md:col-span-2">
                 <div className="flex flex-col items-center justify-center">
@@ -385,10 +484,38 @@ export default function PublicBookingPage() {
                   <p className="text-xs font-bold text-ink">{inspoImages?.length ? `${inspoImages.length} image${inspoImages.length === 1 ? "" : "s"} selected` : "Upload inspo or reference images"}</p>
                   <p className="mt-1 text-[10px] font-medium text-ink/55">PNG or JPG images only</p>
                 </div>
-                <input className="hidden" name="inspo_images" type="file" accept="image/*" multiple onChange={(event) => setInspoImages(event.target.files)} />
+                <input
+                  className="hidden"
+                  name="inspo_images"
+                  type="file"
+                  accept="image/png,image/jpeg,image/jpg"
+                  multiple
+                  onChange={(event) => {
+                    setInspoImages(event.target.files);
+                    // Validate images on selection
+                    if (event.target.files && event.target.files.length > 0) {
+                      const result = validateInspoImages(event.target.files);
+                      const errors = new Map(fieldErrors);
+                      if (result.valid) {
+                        errors.delete("inspo_images");
+                      } else {
+                        result.errors.forEach(e => errors.set(e.field, e.message));
+                      }
+                      setFieldErrors(errors);
+                    }
+                  }}
+                />
               </label>
+              {fieldErrors.get("inspo_images") && <p className="text-xs font-semibold text-red-700 md:col-span-2">{fieldErrors.get("inspo_images")}</p>}
 
-              <textarea className="rounded-xl bg-[#f8faf9] md:col-span-2" name="notes" placeholder="Notes or style details..." rows={4} value={notes} onChange={(event) => setNotes(event.target.value)} />
+              <textarea
+                className="rounded-xl bg-[#f8faf9] md:col-span-2"
+                name="notes"
+                placeholder="Notes or style details..."
+                rows={4}
+                value={notes}
+                onChange={(event) => setNotes(event.target.value)}
+              />
             </div>
           </section>
 
@@ -402,94 +529,6 @@ export default function PublicBookingPage() {
         </form>
       </div>
 
-      <div className="fixed bottom-4 right-4 z-50 flex w-[calc(100vw-2rem)] max-w-sm flex-col items-end gap-3 sm:bottom-6 sm:right-6">
-        {guideOpen && (
-          <section className="w-full overflow-hidden rounded-2xl border border-white/80 bg-white shadow-[0_24px_60px_rgba(14,71,49,0.16)]">
-            <div className="flex items-start justify-between gap-3 border-b border-line/70 bg-[#f8faf9] px-4 py-3">
-              <div>
-                <p className="text-sm font-bold text-ink">Bookie Assistant</p>
-                <p className="mt-1 text-xs font-medium leading-relaxed text-ink/65">
-                  Hi, I'm Bookie Assistant for {tenant?.name ?? "this business"}. Ask me about services, prices, availability, deposits, or booking.
-                </p>
-              </div>
-              <button
-                type="button"
-                aria-label="Close assistant"
-                onClick={() => setGuideOpen(false)}
-                className="flex h-8 min-h-0 w-8 shrink-0 items-center justify-center rounded-lg border border-line/70 bg-white p-0 text-ink shadow-none hover:translate-y-0 hover:bg-[#eef4ef] hover:shadow-none"
-              >
-                x
-              </button>
-            </div>
-
-            <div className="grid max-h-[22rem] gap-3 overflow-y-auto px-4 py-3">
-              {guideMessages.length === 0 && (
-                <div className="grid gap-2">
-                  {QUICK_ASSISTANT_MESSAGES.map((question) => (
-                    <button
-                      key={question}
-                      type="button"
-                      onClick={() => void sendAssistantMessage(question)}
-                      className="min-h-0 rounded-xl border border-line/70 bg-white px-3 py-2 text-left text-xs font-semibold text-ink shadow-none hover:translate-y-0 hover:border-action/30 hover:bg-[#f8faf9] hover:text-action hover:shadow-none"
-                    >
-                      {question}
-                    </button>
-                  ))}
-                </div>
-              )}
-
-              {guideMessages.map((message) => (
-                <div key={message.id} className={`grid gap-2 ${message.role === "customer" ? "justify-items-end" : "justify-items-start"}`}>
-                  <p
-                    className={`max-w-[85%] rounded-2xl px-3 py-2 text-sm leading-relaxed ${
-                      message.role === "customer" ? "bg-action text-white" : "bg-[#f1f5f2] text-ink"
-                    }`}
-                  >
-                    {message.text}
-                  </p>
-                  {message.actions && message.actions.length > 0 && (
-                    <div className="flex max-w-[85%] flex-wrap gap-2">
-                      {message.actions.map((action, index) => (
-                        <button
-                          key={`${message.id}-${action.type}-${action.service_id ?? action.start_time ?? index}`}
-                          type="button"
-                          onClick={() => handleAssistantAction(action)}
-                          className="min-h-0 rounded-full border border-action/20 bg-white px-3 py-1.5 text-xs font-semibold text-action shadow-none hover:translate-y-0 hover:bg-[#eef4ef] hover:shadow-none"
-                        >
-                          {action.label}
-                        </button>
-                      ))}
-                    </div>
-                  )}
-                </div>
-              ))}
-
-              {guideLoading && <p className="text-xs font-semibold text-ink/55">Checking...</p>}
-              {guideError && <p className="rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-xs font-semibold text-red-700">{guideError}</p>}
-            </div>
-
-            <form onSubmit={submitGuideMessage} className="flex gap-2 border-t border-line/70 p-3">
-              <input
-                className="min-h-[2.75rem] rounded-xl bg-[#f8faf9] text-sm"
-                value={guideDraft}
-                onChange={(event) => setGuideDraft(event.target.value)}
-                placeholder="Ask about prices, availability, deposits"
-              />
-              <button type="submit" disabled={!guideDraft.trim() || guideLoading} className="min-h-[2.75rem] rounded-xl px-4 text-sm">
-                Send
-              </button>
-            </form>
-          </section>
-        )}
-
-        <button
-          type="button"
-          onClick={() => setGuideOpen((current) => !current)}
-          className="rounded-full border-0 bg-action px-5 py-3 text-sm font-bold text-white shadow-[0_18px_40px_rgba(14,71,49,0.22)]"
-        >
-          Need help?
-        </button>
-      </div>
     </main>
   );
 }

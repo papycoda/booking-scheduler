@@ -84,6 +84,74 @@ class BookingManagementServiceTests(unittest.IsolatedAsyncioTestCase):
         self.assertTrue(svc.verify_manage_token(raw_token, token_hash))
         self.assertFalse(svc.verify_manage_token("wrong-token", token_hash))
 
+    async def test_managed_booking_exposes_pending_checkout_without_claiming_deposit_paid(self):
+        tenant = SimpleNamespace(id=uuid4(), cancellation_notice_hours=24)
+        booking = SimpleNamespace(
+            id=uuid4(),
+            tenant_id=tenant.id,
+            status="pending_payment",
+            start_time=datetime.now(UTC) + timedelta(days=3),
+            end_time=datetime.now(UTC) + timedelta(days=3, hours=1),
+            manage_token_hash=svc.hash_manage_token("valid-token"),
+            deposit_amount=5_000,
+            price_status="fixed",
+            quoted_price=None,
+        )
+        service = SimpleNamespace(id=uuid4(), name="Consultation")
+        staff = SimpleNamespace(id=uuid4(), name="Ada")
+        payment = SimpleNamespace(status="pending", checkout_url="https://pay.example/checkout")
+        client = SimpleNamespace(id=uuid4())
+        db = FakeSession(
+            [
+                FakeRowResult((booking, client, service, staff, payment)),
+                FakeRowsResult([]),
+            ]
+        )
+
+        response = await svc.get_managed_booking(
+            db,
+            tenant=tenant,
+            booking_id=booking.id,
+            token="valid-token",
+        )
+
+        self.assertEqual(response.payment_status, "pending")
+        self.assertEqual(response.payment_url, "https://pay.example/checkout")
+
+    async def test_managed_booking_hides_checkout_after_success(self):
+        tenant = SimpleNamespace(id=uuid4(), cancellation_notice_hours=24)
+        booking = SimpleNamespace(
+            id=uuid4(),
+            tenant_id=tenant.id,
+            status="confirmed",
+            start_time=datetime.now(UTC) + timedelta(days=3),
+            end_time=datetime.now(UTC) + timedelta(days=3, hours=1),
+            manage_token_hash=svc.hash_manage_token("valid-token"),
+            deposit_amount=5_000,
+            price_status="fixed",
+            quoted_price=None,
+        )
+        service = SimpleNamespace(id=uuid4(), name="Consultation")
+        staff = SimpleNamespace(id=uuid4(), name="Ada")
+        payment = SimpleNamespace(status="success", checkout_url="https://pay.example/checkout")
+        client = SimpleNamespace(id=uuid4())
+        db = FakeSession(
+            [
+                FakeRowResult((booking, client, service, staff, payment)),
+                FakeRowsResult([]),
+            ]
+        )
+
+        response = await svc.get_managed_booking(
+            db,
+            tenant=tenant,
+            booking_id=booking.id,
+            token="valid-token",
+        )
+
+        self.assertEqual(response.payment_status, "success")
+        self.assertIsNone(response.payment_url)
+
     async def test_client_cancellation_requires_valid_token_and_keeps_deposit(self):
         tenant = SimpleNamespace(id=uuid4(), cancellation_notice_hours=24)
         booking = SimpleNamespace(

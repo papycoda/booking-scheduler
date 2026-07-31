@@ -6,7 +6,7 @@ automatically marked as expired to prevent indefinite slot reservation.
 """
 import logging
 
-from sqlalchemy import select, update
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from datetime import datetime, timedelta, UTC
 
@@ -65,27 +65,16 @@ async def expire_stale_pending_bookings(
     if count == 0:
         return 0
 
-    booking_ids = [booking.id for booking, _ in bookings_to_expire]
-
     logger.info(
         "Expiring %d stale pending_payment bookings (older than %s)",
         count,
         cutoff.isoformat(),
     )
 
-    # Mark bookings as expired
-    await db.execute(
-        update(Booking)
-        .where(Booking.id.in_(booking_ids))
-        .values(status="expired", updated_at=now)
-    )
-
-    # Mark associated payments as expired
-    await db.execute(
-        update(Payment)
-        .where(Payment.booking_id.in_(booking_ids))
-        .values(status="expired")
-    )
+    for booking, payment in bookings_to_expire:
+        booking.status = "expired"
+        booking.updated_at = now
+        payment.status = "expired"
 
     await db.commit()
 
