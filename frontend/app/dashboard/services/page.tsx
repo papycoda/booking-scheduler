@@ -247,8 +247,9 @@ export default function ServicesPage() {
                       <input name="name" placeholder="Brow shaping and tint" value={nameDraft} onChange={(event) => setNameDraft(event.target.value)} required />
                     </label>
                     <label className="bookie-label">
-                      How long it takes
+                      How long it takes (minutes)
                       <input name="duration_minutes" type="number" min={5} max={480} step={5} value={durationDraft} onChange={(event) => setDurationDraft(event.target.value)} required />
+                      <span className="bookie-help">Example: 60 minutes = 1 hour.</span>
                     </label>
                     <label className="bookie-label">
                       Price or starting price (NGN)

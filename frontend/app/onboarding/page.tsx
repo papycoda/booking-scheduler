@@ -380,8 +380,9 @@ export default function OnboardingPage() {
                   <input name="name" placeholder="Braids consultation" required />
                 </label>
                 <label className="grid gap-2 text-sm font-semibold text-ink/75">
-                  How long it takes
-                  <input name="duration_minutes" type="number" min={5} step={5} defaultValue={60} required />
+                  How long it takes (minutes)
+                  <input name="duration_minutes" type="number" min={5} max={480} step={5} defaultValue={60} required />
+                  <span className="text-xs font-medium text-ink/55">Example: 60 minutes = 1 hour.</span>
                 </label>
                 <label className="grid gap-2 text-sm font-semibold text-ink/75">
                   Price or starting price (NGN)
