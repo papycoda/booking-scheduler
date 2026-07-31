@@ -341,15 +341,15 @@ export default function OnboardingPage() {
                 <input name="default_deposit_amount" type="number" min={0} step={1} defaultValue={koboToNgn(tenant?.default_deposit_amount)} />
               </label>
               <label className="grid gap-2 text-sm font-semibold text-ink/75">
-                How far ahead clients can book
+                How far ahead clients can book (days)
                 <input name="advance_booking_days" type="number" min={1} defaultValue={tenant?.advance_booking_days ?? 30} />
               </label>
               <label className="grid gap-2 text-sm font-semibold text-ink/75">
-                Minimum notice before booking
+                Minimum notice before booking (hours)
                 <input name="min_notice_hours" type="number" min={0} defaultValue={tenant?.min_notice_hours ?? 2} />
               </label>
               <label className="grid gap-2 text-sm font-semibold text-ink/75">
-                Minimum notice before cancel
+                Minimum notice before cancellation (hours)
                 <input name="cancellation_notice_hours" type="number" min={0} defaultValue={tenant?.cancellation_notice_hours ?? 24} />
               </label>
               <label className="grid gap-2 text-sm font-semibold text-ink/75">

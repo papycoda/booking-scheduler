@@ -207,9 +207,9 @@ export default function SettingsPage() {
             <section id="booking-rules" className="bookie-card scroll-mt-8 p-5">
               <h2 className="section-title">Booking rules</h2>
               <div className="mt-5 grid gap-4 sm:grid-cols-3">
-                <label className="bookie-label">How far ahead clients can book<input name="advance_booking_days" type="number" min={1} defaultValue={tenant?.advance_booking_days ?? 30} /></label>
-                <label className="bookie-label">Minimum notice before booking<input name="min_notice_hours" type="number" min={0} defaultValue={tenant?.min_notice_hours ?? 2} /></label>
-                <label className="bookie-label">Minimum notice before cancel<input name="cancellation_notice_hours" type="number" min={0} defaultValue={tenant?.cancellation_notice_hours ?? 24} /></label>
+                <label className="bookie-label">How far ahead clients can book (days)<input name="advance_booking_days" type="number" min={1} defaultValue={tenant?.advance_booking_days ?? 30} /></label>
+                <label className="bookie-label">Minimum notice before booking (hours)<input name="min_notice_hours" type="number" min={0} defaultValue={tenant?.min_notice_hours ?? 2} /></label>
+                <label className="bookie-label">Minimum notice before cancellation (hours)<input name="cancellation_notice_hours" type="number" min={0} defaultValue={tenant?.cancellation_notice_hours ?? 24} /></label>
               </div>
               <label className="mt-5 flex items-center gap-3 text-sm font-semibold text-[#0f2119]">
                 <input className="h-4 min-h-0 w-4 accent-[#0e4731]" name="allow_staff_selection" type="checkbox" defaultChecked={tenant?.allow_staff_selection ?? true} />
