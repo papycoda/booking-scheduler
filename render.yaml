@@ -1,6 +1,6 @@
 services:
   - type: web
-    name: booking-scheduler-api
+    name: bookie-papycoda-api
     runtime: python
     plan: free
     autoDeploy: true
@@ -18,11 +18,11 @@ services:
         generateValue: true
       - key: DATABASE_URL
         fromDatabase:
-          name: booking-scheduler-postgres
+          name: bookie-papycoda-postgres
           property: connectionString
       - key: REDIS_URL
         fromService:
-          name: booking-scheduler-redis
+          name: bookie-papycoda-redis
           type: keyvalue
           property: connectionString
       - key: FRONTEND_URL
@@ -35,7 +35,7 @@ services:
         sync: false
 
   - type: web
-    name: booking-scheduler-frontend
+    name: bookie-papycoda-web
     runtime: node
     plan: free
     autoDeploy: true
@@ -48,13 +48,13 @@ services:
         sync: false
 
   - type: keyvalue
-    name: booking-scheduler-redis
+    name: bookie-papycoda-redis
     plan: free
     maxmemoryPolicy: allkeys-lru
     ipAllowList: []
 
 databases:
-  - name: booking-scheduler-postgres
+  - name: bookie-papycoda-postgres
     databaseName: booking_scheduler
     user: booking_scheduler
     plan: free
