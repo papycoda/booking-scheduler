@@ -64,8 +64,10 @@ class LoggingSession(CapturingSession):
 class FakeSession:
     def __init__(self, rows):
         self.rows = rows
+        self.executions = 0
 
     async def execute(self, _stmt):
+        self.executions += 1
         return FakeResult(self.rows)
 
 
@@ -124,6 +126,47 @@ class NotificationServiceTests(unittest.IsolatedAsyncioTestCase):
         sent_count = await svc.process_due_reminders(FakeSession([booking_a, booking_b]))
 
         self.assertEqual(sent_count, 2)
+
+    async def test_process_due_reminders_uses_non_overlapping_catch_up_windows(self):
+        db = FakeSession([])
+        now = datetime(2026, 8, 2, 12, 0, tzinfo=UTC)
+
+        await svc.process_due_reminders(db, now=now)
+
+        self.assertEqual(db.executions, 2)
+
+    async def test_booking_reminder_uses_human_local_time(self):
+        booking = SimpleNamespace(
+            id=uuid4(),
+            tenant_id=uuid4(),
+            start_time=datetime(2026, 8, 6, 10, 45, tzinfo=UTC),
+        )
+        tenant = SimpleNamespace(id=booking.tenant_id, name="Bookie Launch Studio", timezone="Africa/Lagos")
+        client = SimpleNamespace(full_name="Opeyemi", email="client@example.com", whatsapp_number=None)
+        service = SimpleNamespace(name="Consultation")
+        staff = SimpleNamespace(name="Ayo")
+        captured = {}
+        original_context = svc.load_booking_context
+        original_email = svc.send_and_log_email
+
+        async def load_context(_db, _booking):
+            return tenant, client, service, staff
+
+        async def send_email(_db, **kwargs):
+            captured.update(kwargs)
+            return True
+
+        svc.load_booking_context = load_context
+        svc.send_and_log_email = send_email
+        try:
+            sent = await svc.send_booking_reminder(SimpleNamespace(), booking, "booking_reminder_24h")
+        finally:
+            svc.load_booking_context = original_context
+            svc.send_and_log_email = original_email
+
+        self.assertTrue(sent)
+        self.assertIn("Thursday, 6 August 2026 at 11:45 AM", captured["text"])
+        self.assertNotIn("2026-08-06T", captured["text"])
 
     async def test_notification_dedupe_is_scoped_to_recipient(self):
         db = CapturingSession()

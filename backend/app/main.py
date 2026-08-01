@@ -20,13 +20,16 @@ from app.routers.staff import router as staff_router
 from app.routers.tenants import router as tenants_router
 from app.routers.whatsapp import router as whatsapp_router
 from app.routers.webhooks import router as webhooks_router
-from app.services.reminder_scheduler import start_scheduler
+from app.services.reminder_scheduler import start_scheduler, stop_scheduler
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     start_scheduler()
-    yield
+    try:
+        yield
+    finally:
+        stop_scheduler()
 
 
 app = FastAPI(title="Booking Scheduler API", version="0.1.0", lifespan=lifespan)

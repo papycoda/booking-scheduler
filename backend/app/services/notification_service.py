@@ -306,7 +306,14 @@ async def send_reschedule_decision_notification(db: AsyncSession, request_id) ->
 
 async def send_booking_reminder(db: AsyncSession, booking: Booking, reminder_type: str) -> bool:
     tenant, client, service, staff = await load_booking_context(db, booking)
-    text = f"Reminder: Your {service.name} appointment is at {booking.start_time.isoformat()} with {staff.name}."
+    time_label = format_local_datetime(booking.start_time, tenant.timezone)
+    reminder_label = "tomorrow" if reminder_type == "booking_reminder_24h" else "soon"
+    text = (
+        f"Hi {client.full_name},\n\n"
+        f"A quick reminder that your {service.name} appointment with {staff.name} is {reminder_label}.\n\n"
+        f"When: {time_label}\n\n"
+        f"See you then,\n{tenant.name}"
+    )
     sent_email = await send_and_log_email(
         db,
         booking=booking,
@@ -325,7 +332,7 @@ async def send_booking_reminder(db: AsyncSession, booking: Booking, reminder_typ
             notification_type=reminder_type,
             to_number=client.whatsapp_number,
             template_name="booking_reminder",
-            body_params=[service.name, booking.start_time.isoformat(), staff.name],
+            body_params=[service.name, time_label, staff.name],
         )
     return sent_email or sent_whatsapp
 
@@ -504,11 +511,13 @@ async def send_whatsapp_message(*, to_number: str, body: str) -> str | None:
         return None
 
 
-async def process_due_reminders(db: AsyncSession) -> int:
-    now = datetime.now(UTC)
+async def process_due_reminders(db: AsyncSession, *, now: datetime | None = None) -> int:
+    now = now or datetime.now(UTC)
     windows = [
-        ("booking_reminder_24h", now + timedelta(hours=23), now + timedelta(hours=25)),
-        ("booking_reminder_1h", now + timedelta(minutes=55), now + timedelta(minutes=65)),
+        # Catch up after a restart without sending both reminders together. A
+        # booking inside the final hour receives only the more useful 1h notice.
+        ("booking_reminder_24h", now + timedelta(hours=1), now + timedelta(hours=24)),
+        ("booking_reminder_1h", now, now + timedelta(hours=1)),
     ]
     sent_count = 0
     for reminder_type, start_time, end_time in windows:

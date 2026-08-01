@@ -1,8 +1,11 @@
 import Image from "next/image";
 import Link from "next/link";
+import { DM_Sans, DM_Serif_Display } from "next/font/google";
 import {
   ArrowRight,
+  BellRinging,
   CalendarBlank,
+  CalendarCheck,
   Check,
   CheckCircle,
   Clock,
@@ -11,242 +14,244 @@ import {
   Robot,
   ShieldCheck,
   Sparkle,
+  SquaresFour,
   Storefront,
   UserCircle,
+  UsersThree,
 } from "@phosphor-icons/react/ssr";
+
+const bodyFont = DM_Sans({ subsets: ["latin"], display: "swap" });
+const displayFont = DM_Serif_Display({ subsets: ["latin"], weight: "400", display: "swap" });
 
 const steps = [
   {
     icon: Storefront,
-    number: "01",
+    number: "1",
     title: "Set up what people can book",
-    description: "Add your services, sessions, spaces or experiences, then set the price, duration and availability.",
+    description: "Add services, sessions, spaces or experiences, then set the price, duration and availability.",
   },
   {
     icon: LinkSimple,
-    number: "02",
-    title: "Share one simple link",
-    description: "Send your Bookie link on WhatsApp, Instagram, your bio, or anywhere clients find you.",
+    number: "2",
+    title: "Share your Bookie link",
+    description: "Send it on WhatsApp, Instagram, your website or anywhere people already find you.",
   },
   {
-    icon: CreditCard,
-    number: "03",
+    icon: CalendarCheck,
+    number: "3",
     title: "Get booked and paid",
-    description: "Clients choose an available time and pay the required deposit to secure the booking.",
+    description: "Clients choose a real available time and pay the required deposit to confirm their booking.",
   },
 ];
 
-const features = [
+const featureCards = [
   {
     icon: CalendarBlank,
-    title: "Live availability",
-    description: "Clients only see times that are actually open, helping you avoid double bookings.",
+    title: "Availability that stays accurate",
+    description: "Only show times that are actually open and protect your schedule from double bookings.",
   },
   {
     icon: CreditCard,
-    title: "Deposit collection",
-    description: "Collect secure Paystack deposits before a booking is confirmed.",
+    title: "Deposits before confirmation",
+    description: "Use Paystack to collect the amount you require before a booking is secured.",
   },
   {
-    icon: UserCircle,
-    title: "No customer account",
-    description: "Clients can book and pay without creating an account or downloading an app.",
+    icon: BellRinging,
+    title: "Automatic reminders",
+    description: "Help clients remember upcoming appointments with scheduled email and messaging reminders.",
+    badge: "Available now",
   },
   {
-    icon: Clock,
-    title: "One organised dashboard",
-    description: "Manage bookings, availability, services, staff, and payment status in one place.",
+    icon: UsersThree,
+    title: "No customer account required",
+    description: "People can book and pay without downloading an app or creating another password.",
   },
 ];
 
-const times = ["9:00", "10:00", "11:00", "12:00", "1:00", "2:00"];
+const schedule = [
+  { time: "10:00", name: "Ada Nwosu", service: "Strategy session", status: "Confirmed" },
+  { time: "13:30", name: "Moyo Daniels", service: "Studio booking", status: "Deposit paid" },
+  { time: "16:00", name: "Kemi Adebayo", service: "Consultation", status: "Confirmed" },
+];
 
 function Wordmark({ light = false }: { light?: boolean }) {
   return (
-    <span className={`text-[1.65rem] font-black tracking-[-0.055em] ${light ? "text-white" : "text-[#092d20]"}`}>
+    <span className={`inline-flex items-center gap-2 text-xl font-black tracking-[-0.04em] ${light ? "text-white" : "text-[#092d20]"}`}>
+      <span className={`grid h-8 w-8 place-items-center rounded-lg text-sm ${light ? "bg-white text-[#0a4d37]" : "bg-[#0a4d37] text-white"}`}>B</span>
       Bookie
     </span>
   );
 }
 
-function BookingPhone() {
+function DashboardPreview({ compact = false }: { compact?: boolean }) {
   return (
-    <div className="relative z-20 mx-auto w-[248px] rounded-[2.4rem] border-[7px] border-[#173a2d] bg-white p-2 shadow-[0_28px_70px_rgba(5,45,31,0.22)] sm:w-[270px]">
-      <div className="mx-auto mb-2 h-4 w-20 rounded-b-xl bg-[#173a2d]" />
-      <div className="overflow-hidden rounded-[1.7rem] border border-[#e1e9e4] bg-white">
-        <div className="relative h-24">
-          <Image src="/landing/studio-interior.png" alt="Warm modern beauty studio" fill className="object-cover" sizes="270px" priority />
-          <span className="absolute left-3 top-3 rounded-full bg-white/90 px-2 py-1 text-[9px] font-bold text-[#0e4731] shadow-sm">Glow Studios</span>
+    <div className={`overflow-hidden rounded-[1.4rem] border border-[#dfe7e1] bg-white shadow-[0_28px_70px_rgba(35,58,44,0.13)] ${compact ? "text-[10px]" : ""}`}>
+      <div className="flex items-center justify-between border-b border-[#e8eee9] px-4 py-3">
+        <div className="flex items-center gap-2">
+          <span className="grid h-7 w-7 place-items-center rounded-lg bg-[#0a4d37] text-[10px] font-black text-white">B</span>
+          <strong className="text-xs">Dashboard</strong>
         </div>
-        <div className="space-y-3 p-3 text-[#0f2119]">
-          <div>
-            <p className="text-[10px] font-bold">1. Choose a service</p>
-            <div className="mt-1 flex items-center justify-between rounded-lg border border-[#dce6e0] px-2 py-2 text-[9px] font-semibold">
-              <span>Makeup · Full glam</span><span>₦30,000</span>
-            </div>
-          </div>
-          <div>
-            <p className="text-[10px] font-bold">2. Select a date</p>
-            <div className="mt-1 flex items-center justify-between rounded-lg border border-[#dce6e0] px-2 py-2 text-[9px]">
-              <span>Saturday, 24 May</span><CalendarBlank size={13} />
-            </div>
-          </div>
-          <div>
-            <p className="text-[10px] font-bold">3. Choose a time</p>
-            <div className="mt-1 grid grid-cols-3 gap-1">
-              {times.map((time) => (
-                <span key={time} className={`rounded-md border px-1 py-1.5 text-center text-[8px] font-semibold ${time === "12:00" ? "border-[#0f6b4f] bg-[#0f6b4f] text-white" : "border-[#dce6e0]"}`}>{time}</span>
-              ))}
-            </div>
-          </div>
-          <div className="rounded-lg bg-[#f3f7f4] p-2">
-            <p className="text-[8px] font-semibold text-[#60766a]">Deposit due now</p>
-            <strong className="text-sm">₦10,000</strong>
-          </div>
-          <div className="flex items-center justify-center gap-1 rounded-lg bg-[#0f6b4f] py-2 text-[9px] font-bold text-white">
-            Pay ₦10,000 deposit <ArrowRight size={11} weight="bold" />
-          </div>
-        </div>
+        <span className="rounded-full bg-[#e9f4ed] px-2 py-1 text-[8px] font-bold text-[#0f6b4f]">Today</span>
       </div>
-    </div>
-  );
-}
-
-function DashboardPreview() {
-  const schedule = [
-    ["10:00", "Tunde Adeyemi", "Haircut"],
-    ["13:00", "Amaka Okafor", "Makeup · Full glam"],
-    ["15:00", "Bola Johnson", "Consultation"],
-  ];
-  return (
-    <div className="absolute right-0 top-14 hidden w-[390px] overflow-hidden rounded-[1.6rem] border border-white bg-white shadow-[0_30px_75px_rgba(5,45,31,0.17)] md:grid md:grid-cols-[92px_1fr] lg:w-[430px]">
-      <aside className="bg-[#0a4d37] p-4 text-white">
-        <span className="text-base font-black tracking-[-0.04em]">Bookie</span>
-        <div className="mt-8 grid gap-4 text-[8px] font-semibold text-white/65">
-          <span className="rounded-lg bg-white/12 px-2 py-2 text-white">Dashboard</span>
-          <span>Bookings</span><span>Services</span><span>Availability</span><span>Payments</span>
-        </div>
-      </aside>
-      <div className="p-5">
-        <p className="text-sm font-bold">Dashboard</p>
-        <div className="mt-4 rounded-xl border border-[#e5ebe7] p-3">
-          <p className="text-[9px] font-bold text-[#60766a]">UPCOMING BOOKING</p>
-          <div className="mt-3 flex items-center gap-2">
-            <Image src="/landing/customer-avatar.png" alt="Customer avatar" width={34} height={34} className="h-9 w-9 rounded-full object-cover" />
-            <div className="min-w-0 flex-1"><p className="truncate text-[10px] font-bold">Amaka Okafor</p><p className="text-[8px] text-[#60766a]">Makeup · Full glam</p></div>
-            <span className="rounded-full bg-[#e8f4ec] px-2 py-1 text-[7px] font-bold text-[#0f6b4f]">Confirmed</span>
+      <div className="grid grid-cols-[88px_1fr] sm:grid-cols-[112px_1fr]">
+        <aside className="border-r border-[#edf1ee] bg-[#fbfcfb] p-3">
+          <div className="grid gap-2 text-[8px] font-semibold text-[#64776d] sm:text-[9px]">
+            {["Overview", "Bookings", "Services", "Staff", "Availability"].map((item, index) => (
+              <span key={item} className={`rounded-lg px-2 py-2 ${index === 0 ? "bg-[#e8f3ec] font-bold text-[#0f6b4f]" : ""}`}>{item}</span>
+            ))}
           </div>
-          <div className="mt-3 flex justify-between border-t border-[#eef2ef] pt-3 text-[9px]">
-            <span>Sat, 24 May · 13:00</span><strong>₦10,000 paid</strong>
-          </div>
-        </div>
-        <div className="mt-4">
-          <div className="flex items-center justify-between"><p className="text-[10px] font-bold">Today&apos;s schedule</p><span className="text-[8px] text-[#60766a]">View all</span></div>
-          <div className="mt-2 divide-y divide-[#eef2ef] rounded-xl border border-[#e5ebe7] px-3">
-            {schedule.map(([time, name, service]) => (
-              <div key={time} className="grid grid-cols-[38px_1fr_auto] items-center gap-2 py-2.5 text-[8px]">
-                <strong>{time}</strong><span><b className="block">{name}</b><span className="text-[#60766a]">{service}</span></span><CheckCircle size={14} weight="fill" className="text-[#0f6b4f]" />
+        </aside>
+        <div className="min-w-0 p-3 sm:p-4">
+          <div className="grid grid-cols-3 gap-2">
+            {[["Bookings", "8"], ["Deposits", "₦85k"], ["Open slots", "12"]].map(([label, value]) => (
+              <div key={label} className="rounded-xl border border-[#e5ebe7] bg-[#fbfcfb] p-2.5">
+                <p className="text-[7px] font-semibold text-[#718178] sm:text-[8px]">{label}</p>
+                <strong className="mt-1 block text-xs sm:text-sm">{value}</strong>
               </div>
             ))}
           </div>
+          <div className="mt-3 rounded-xl border border-[#e5ebe7] bg-white p-3">
+            <div className="flex items-center justify-between">
+              <strong className="text-[9px] sm:text-[10px]">Today&apos;s schedule</strong>
+              <span className="text-[7px] font-semibold text-[#0f6b4f] sm:text-[8px]">View bookings</span>
+            </div>
+            <div className="mt-2 divide-y divide-[#eef2ef]">
+              {schedule.map((booking) => (
+                <div key={booking.time} className="grid grid-cols-[34px_1fr_auto] items-center gap-2 py-2 text-[7px] sm:grid-cols-[42px_1fr_auto] sm:text-[8px]">
+                  <strong>{booking.time}</strong>
+                  <span className="min-w-0"><b className="block truncate">{booking.name}</b><span className="block truncate text-[#708077]">{booking.service}</span></span>
+                  <span className="hidden rounded-full bg-[#edf6f0] px-2 py-1 font-bold text-[#0f6b4f] sm:inline">{booking.status}</span>
+                </div>
+              ))}
+            </div>
+          </div>
         </div>
       </div>
     </div>
   );
 }
 
-function CustomerJourney() {
-  const cards = [
-    { label: "Choose service", body: <><div className="relative h-20 overflow-hidden rounded-lg"><Image src="/landing/studio-interior.png" alt="Glow Studios interior" fill className="object-cover" sizes="180px" /></div><strong className="mt-2 block text-xs">Glow Studios</strong><span className="text-[10px] text-[#60766a]">Makeup appointment</span></> },
-    { label: "Pick date & time", body: <><p className="text-[10px] font-bold">May 2026</p><div className="mt-3 grid grid-cols-5 gap-1 text-center text-[9px]">{[18,19,20,21,22,23,24,25,26,27].map(day => <span key={day} className={`rounded-md py-1 ${day === 24 ? "bg-[#0f6b4f] text-white" : "bg-[#f4f7f5]"}`}>{day}</span>)}</div></> },
-    { label: "Pay deposit", body: <><p className="text-[10px] text-[#60766a]">Deposit due now</p><strong className="mt-1 block text-xl">₦10,000</strong><div className="mt-4 rounded-lg bg-[#0f6b4f] py-2 text-center text-[9px] font-bold text-white">Pay securely</div></> },
-    { label: "Confirmed", body: <><CheckCircle size={42} weight="fill" className="mx-auto text-[#0f6b4f]" /><strong className="mt-3 block text-center text-xs">Booking confirmed!</strong><p className="mt-1 text-center text-[9px] text-[#60766a]">You&apos;ll receive a confirmation shortly.</p></> },
-  ];
+function BookingPreview() {
+  const times = ["9:00 AM", "10:30 AM", "12:00 PM", "2:00 PM"];
   return (
-    <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-      {cards.map((card, index) => (
-        <div key={card.label}>
-          <div className="mb-3 flex items-center gap-2 text-[10px] font-bold text-[#0e4731]"><span className="grid h-6 w-6 place-items-center rounded-full bg-[#0f6b4f] text-white">{index + 1}</span>{card.label}</div>
-          <div className="min-h-44 rounded-2xl border border-[#e1e9e4] bg-white p-3 shadow-[0_15px_35px_rgba(5,45,31,0.06)]">{card.body}</div>
+    <div className="w-full max-w-[280px] overflow-hidden rounded-[1.6rem] border border-[#dfe7e1] bg-white shadow-[0_26px_65px_rgba(22,56,41,0.2)]">
+      <div className="relative h-24">
+        <Image src="/landing/studio-interior.png" alt="A bright modern bookable studio" fill className="object-cover" sizes="280px" priority />
+        <div className="absolute inset-x-3 bottom-3 flex items-end justify-between text-white">
+          <div><p className="text-[8px] font-bold uppercase tracking-[0.12em] text-white/80">Your booking page</p><strong className="text-sm">Northstar Studio</strong></div>
+          <span className="rounded-full bg-white/90 px-2 py-1 text-[7px] font-bold text-[#0a4d37]">Open today</span>
         </div>
-      ))}
+      </div>
+      <div className="space-y-3 p-3.5">
+        <div>
+          <p className="text-[9px] font-black text-[#17382b]">1. Choose what to book</p>
+          <div className="mt-1.5 flex items-center justify-between rounded-lg border border-[#dce6e0] px-2.5 py-2 text-[8px] font-semibold"><span>Creative studio · 90 min</span><span>₦25,000</span></div>
+        </div>
+        <div>
+          <p className="text-[9px] font-black text-[#17382b]">2. Pick an available time</p>
+          <div className="mt-1.5 grid grid-cols-2 gap-1.5">
+            {times.map((time) => <span key={time} className={`rounded-md border px-2 py-1.5 text-center text-[7px] font-bold ${time === "12:00 PM" ? "border-[#0f6b4f] bg-[#0f6b4f] text-white" : "border-[#dce6e0] text-[#40594e]"}`}>{time}</span>)}
+          </div>
+        </div>
+        <div className="flex items-center justify-between rounded-lg bg-[#f1f6f2] p-2.5"><span className="text-[8px] font-semibold text-[#60766a]">Deposit due now</span><strong className="text-sm">₦10,000</strong></div>
+        <div className="flex items-center justify-center gap-1.5 rounded-lg bg-[#0f6b4f] py-2.5 text-[8px] font-black text-white">Continue to payment <ArrowRight size={11} weight="bold" /></div>
+      </div>
+    </div>
+  );
+}
+
+function ProductShowcase() {
+  return (
+    <div className="relative rounded-[2rem] border border-[#eddfc1] bg-[#fbf0d9] p-5 shadow-[0_30px_90px_rgba(86,67,31,0.1)] sm:p-8 lg:min-h-[540px] lg:p-10">
+      <div className="mb-6 flex items-center justify-between text-[10px] font-black uppercase tracking-[0.13em] text-[#64766d]">
+        <span>One product, both sides of the booking</span>
+        <span className="rounded-full bg-white px-3 py-1.5 text-[#0f6b4f] shadow-sm">Live experience</span>
+      </div>
+      <div className="hidden md:block">
+        <div className="ml-auto w-[92%]"><DashboardPreview /></div>
+        <div className="absolute bottom-[-28px] left-3 lg:bottom-[-34px] lg:left-7"><BookingPreview /></div>
+      </div>
+      <div className="md:hidden">
+        <BookingPreview />
+        <div className="mt-5 grid grid-cols-3 gap-2">
+          {[["Bookings", "8"], ["Deposits", "₦85k"], ["Open slots", "12"]].map(([label, value]) => (
+            <div key={label} className="rounded-xl border border-white bg-white/80 p-3 text-center"><strong className="block text-sm">{value}</strong><span className="mt-1 block text-[8px] font-semibold text-[#64766d]">{label}</span></div>
+          ))}
+        </div>
+      </div>
     </div>
   );
 }
 
 export default function HomePage() {
   return (
-    <main className="min-h-screen overflow-hidden bg-[#fffdf9] font-sans text-[#0b2c20]">
-      <header className="border-b border-[#e9eee9] bg-[#fffdf9]/95">
+    <main className={`${bodyFont.className} min-h-screen bg-[#fffdf8] text-[#102b21]`}>
+      <header className="sticky top-0 z-50 border-b border-[#e8ece7] bg-[#fffdf8]/90 shadow-[0_8px_30px_rgba(24,51,39,0.04)] backdrop-blur-xl">
         <div className="mx-auto flex h-20 max-w-7xl items-center justify-between px-5 sm:px-8">
           <Link href="/" aria-label="Bookie home"><Wordmark /></Link>
-          <nav className="hidden items-center gap-8 text-sm font-semibold text-[#40594e] md:flex" aria-label="Main navigation">
-            <a href="#how-it-works" className="transition hover:text-[#0f6b4f]">How it works</a>
-            <a href="#features" className="transition hover:text-[#0f6b4f]">Features</a>
-            <a href="#ai-front-desk" className="transition hover:text-[#0f6b4f]">AI front desk</a>
+          <nav className="hidden items-center gap-7 text-sm font-semibold text-[#50655b] md:flex" aria-label="Main navigation">
+            <a href="#how-it-works" className="hover:text-[#0f6b4f]">How it works</a>
+            <a href="#features" className="hover:text-[#0f6b4f]">Features</a>
+            <a href="#ai-front-desk" className="hover:text-[#0f6b4f]">AI front desk</a>
           </nav>
-          <div className="flex items-center gap-3">
-            <Link href="/login" className="hidden rounded-xl px-3 py-2 text-sm font-bold text-[#0b2c20] hover:bg-[#f2f6f2] sm:inline-flex">Sign in</Link>
-            <Link href="/register" className="inline-flex min-h-11 items-center rounded-xl bg-[#0f6b4f] px-4 text-sm font-bold text-white shadow-[0_12px_24px_rgba(15,107,79,0.18)] transition hover:-translate-y-0.5 hover:bg-[#0a563f]">Create your booking page</Link>
+          <div className="flex items-center gap-2 sm:gap-3">
+            <Link href="/login" className="hidden px-3 py-2 text-sm font-bold text-[#17382b] hover:text-[#0f6b4f] sm:inline-flex">Sign in</Link>
+            <Link href="/register" className="inline-flex min-h-11 items-center rounded-xl bg-[#0f6b4f] px-4 text-xs font-black text-white shadow-[0_12px_26px_rgba(15,107,79,0.18)] transition hover:-translate-y-0.5 hover:bg-[#0a563f] sm:text-sm">Create your page</Link>
           </div>
         </div>
       </header>
 
-      <section className="mx-auto grid min-h-[680px] max-w-7xl items-center gap-14 px-5 py-16 sm:px-8 lg:grid-cols-[0.88fr_1.12fr] lg:py-20">
-        <div className="relative z-30 max-w-2xl">
-          <span className="inline-flex items-center gap-2 rounded-full border border-[#dbe7df] bg-white px-3 py-1.5 text-xs font-bold text-[#0f6b4f]"><ShieldCheck size={15} weight="fill" /> Booking made simple</span>
-          <h1 className="mt-6 text-[clamp(3rem,6vw,5.6rem)] font-black leading-[0.95] tracking-[-0.065em] text-[#092d20]">
-            Your bookings, availability and deposits—handled through one simple link.
-          </h1>
-          <p className="mt-7 max-w-xl text-lg font-medium leading-8 text-[#50685d]">Set up what people can book, share your link, and let them choose a time and pay without the back-and-forth.</p>
-          <div className="mt-9 flex flex-col gap-2 sm:flex-row sm:items-center sm:gap-4">
-            <Link href="/register" className="group inline-flex min-h-14 w-full items-center justify-between rounded-2xl bg-[#0f6b4f] px-5 text-sm font-bold text-white shadow-[0_16px_32px_rgba(15,107,79,0.2)] transition hover:-translate-y-0.5 hover:bg-[#0a563f] sm:w-auto sm:min-w-[250px]">
-              <span>Create your booking page</span><span className="grid h-8 w-8 place-items-center rounded-full bg-white/15 transition group-hover:translate-x-0.5"><ArrowRight size={17} weight="bold" /></span>
-            </Link>
-            <Link href="/book/bookie-live-demo" className="inline-flex min-h-12 items-center justify-center gap-2 rounded-xl px-4 text-sm font-bold text-[#0f6b4f] transition hover:bg-[#f1f7f3] sm:border sm:border-[#bcd2c5] sm:bg-white">See a live booking page <ArrowRight size={15} weight="bold" /></Link>
+      <section className="mx-auto grid max-w-7xl items-center gap-12 px-5 pb-20 pt-14 sm:px-8 sm:pt-20 lg:grid-cols-[0.88fr_1.12fr] lg:gap-16 lg:pb-28">
+        <div className="max-w-2xl">
+          <span className="inline-flex items-center gap-2 rounded-full border border-[#dce7df] bg-white px-3 py-1.5 text-[11px] font-black uppercase tracking-[0.1em] text-[#0f6b4f]"><ShieldCheck size={14} weight="fill" /> Simple online booking</span>
+          <h1 className={`${displayFont.className} mt-6 text-[clamp(3.3rem,6.2vw,5.35rem)] font-normal leading-[0.94] tracking-[-0.045em] text-[#092d20]`}>One link for availability, bookings and deposits.</h1>
+          <p className="mt-6 max-w-xl text-base font-medium leading-7 text-[#52675d] sm:text-lg sm:leading-8">Set up what people can book, share your Bookie link, and let clients choose a real available time and pay their deposit—without the back-and-forth.</p>
+          <div className="mt-8 flex flex-col gap-3 sm:flex-row">
+            <Link href="/register" className="group inline-flex min-h-14 items-center justify-between gap-5 rounded-xl bg-[#0f6b4f] px-5 text-sm font-black text-white shadow-[0_18px_36px_rgba(15,107,79,0.2)] transition hover:-translate-y-0.5 hover:bg-[#0a563f] sm:min-w-[230px]">Create your booking page <span className="grid h-8 w-8 place-items-center rounded-full bg-white/15"><ArrowRight size={16} weight="bold" /></span></Link>
+            <Link href="/book/bookie-live-demo" className="inline-flex min-h-14 items-center justify-center gap-2 rounded-xl border border-[#bfd0c5] bg-white px-5 text-sm font-black text-[#0f6b4f] transition hover:bg-[#f1f7f3]">View a live booking page <ArrowRight size={15} weight="bold" /></Link>
           </div>
-          <p className="mt-5 flex items-center gap-2 text-sm font-semibold text-[#60766a]"><Check size={16} weight="bold" className="text-[#0f6b4f]" /> People can book without an app or account</p>
+          <div className="mt-6 flex flex-wrap gap-x-5 gap-y-2 text-xs font-bold text-[#60766a]">
+            <span className="flex items-center gap-2"><Check size={15} weight="bold" className="text-[#0f6b4f]" /> No customer account</span>
+            <span className="flex items-center gap-2"><Check size={15} weight="bold" className="text-[#0f6b4f]" /> Paystack deposits</span>
+            <span className="flex items-center gap-2"><Check size={15} weight="bold" className="text-[#0f6b4f]" /> Real availability</span>
+          </div>
         </div>
-        <div className="relative min-h-[570px] rounded-[2.5rem] bg-[#eef4ef] p-8 sm:p-12">
-          <div className="absolute inset-x-8 top-8 flex items-center justify-between text-xs font-bold text-[#60766a]"><span>BOOKING EXPERIENCE</span><span className="rounded-full bg-[#ffdfcc] px-3 py-1 text-[#8a4721]">Live product</span></div>
-          <div className="relative mt-12 flex h-[490px] items-center justify-start md:pl-2 lg:pl-5">
-            <BookingPhone />
-            <DashboardPreview />
+        <ProductShowcase />
+      </section>
+
+      <section className="border-y border-[#eee5d2] bg-[#fbf5e8]">
+        <div className="mx-auto flex max-w-7xl flex-col items-center gap-5 px-5 py-7 text-center sm:px-8 lg:flex-row lg:justify-between lg:text-left">
+          <div><p className="text-[10px] font-black uppercase tracking-[0.16em] text-[#0f6b4f]">Made for anything people can book</p><p className="mt-1 text-sm font-bold text-[#263f34]">Time, services, sessions, spaces and experiences.</p></div>
+          <div className="flex flex-wrap justify-center gap-2 text-xs font-bold text-[#40594e]">
+            {["Appointments", "Consultations", "Classes", "Studios", "Home services"].map((item) => <span key={item} className="rounded-full border border-[#e2d8c4] bg-white px-3 py-2">{item}</span>)}
           </div>
         </div>
       </section>
 
-      <div className="mx-auto max-w-7xl px-5 sm:px-8">
-        <div className="flex flex-col items-center justify-center gap-3 rounded-2xl border border-[#f2dfd2] bg-[#fff5ed] px-6 py-5 text-center text-sm font-bold text-[#173a2d] sm:flex-row sm:gap-5">
-          <span className="grid h-10 w-10 place-items-center rounded-full bg-[#ffdcc7] text-[#80441f]"><Storefront size={21} weight="duotone" /></span>
-          For anyone offering something people can book—time, services, spaces, sessions or experiences.
-        </div>
-      </div>
-
       <section id="how-it-works" className="mx-auto max-w-7xl scroll-mt-20 px-5 py-24 sm:px-8">
-        <div className="mx-auto max-w-2xl text-center">
-          <p className="text-xs font-black uppercase tracking-[0.18em] text-[#0f6b4f]">Simple by design</p>
-          <h2 className="mt-3 text-4xl font-black tracking-[-0.045em] sm:text-5xl">From enquiry to confirmed booking</h2>
-        </div>
+        <div className="mx-auto max-w-2xl text-center"><p className="text-[11px] font-black uppercase tracking-[0.16em] text-[#0f6b4f]">How it works</p><h2 className={`${displayFont.className} mt-3 text-5xl font-normal leading-[1.02] tracking-[-0.035em] sm:text-6xl`}>From enquiry to confirmed booking.</h2><p className="mt-4 text-base font-medium leading-7 text-[#60766a]">A clear path for you and the people booking with you.</p></div>
         <div className="mt-14 grid gap-5 md:grid-cols-3">
           {steps.map(({ icon: Icon, number, title, description }) => (
-            <article key={number} className="relative rounded-3xl border border-[#e3eae5] bg-white p-7 shadow-[0_22px_55px_rgba(5,45,31,0.045)]">
-              <div className="flex items-center justify-between"><span className="grid h-12 w-12 place-items-center rounded-2xl bg-[#ffdfcc] text-[#7c421f]"><Icon size={24} weight="duotone" /></span><span className="text-sm font-black text-[#b9c7bf]">{number}</span></div>
-              <h3 className="mt-7 text-xl font-black tracking-[-0.025em]">{title}</h3>
-              <p className="mt-3 text-sm font-medium leading-6 text-[#60766a]">{description}</p>
+            <article key={number} className="rounded-2xl border border-[#e2e8e3] bg-white p-6 shadow-[0_18px_45px_rgba(20,55,40,0.06)]">
+              <div className="flex items-start justify-between"><span className="grid h-14 w-14 place-items-center rounded-2xl bg-[#fbefd9] text-[#8a5525]"><Icon size={27} weight="duotone" /></span><span className="text-4xl font-black text-[#eadcbe]">{number}.</span></div>
+              <h3 className="mt-7 text-xl font-black tracking-[-0.03em]">{title}</h3><p className="mt-3 text-sm font-medium leading-6 text-[#60766a]">{description}</p>
             </article>
           ))}
         </div>
       </section>
 
-      <section id="features" className="scroll-mt-20 bg-[#f4f8f4] py-24">
+      <section id="features" className="scroll-mt-20 bg-[#f3f7f3] py-24">
         <div className="mx-auto max-w-7xl px-5 sm:px-8">
-          <div className="max-w-2xl"><p className="text-xs font-black uppercase tracking-[0.18em] text-[#0f6b4f]">Everything in one place</p><h2 className="mt-3 text-4xl font-black tracking-[-0.045em] sm:text-5xl">Run your bookings without the chaos.</h2></div>
-          <div className="mt-14 grid gap-5 sm:grid-cols-2 lg:grid-cols-4">
-            {features.map(({ icon: Icon, title, description }) => (
-              <article key={title} className="rounded-3xl border border-[#dfe8e1] bg-white p-6">
-                <span className="grid h-12 w-12 place-items-center rounded-full bg-[#e8f2e9] text-[#0f6b4f]"><Icon size={24} weight="duotone" /></span>
-                <h3 className="mt-6 text-lg font-black tracking-[-0.02em]">{title}</h3><p className="mt-3 text-sm font-medium leading-6 text-[#60766a]">{description}</p>
+          <div className="grid items-center gap-12 lg:grid-cols-[1.08fr_0.92fr]">
+            <div className="rounded-[2rem] bg-[#e5eee7] p-4 sm:p-7"><DashboardPreview /></div>
+            <div><p className="text-[11px] font-black uppercase tracking-[0.16em] text-[#0f6b4f]">Your business side</p><h2 className={`${displayFont.className} mt-3 text-5xl font-normal leading-[1.02] tracking-[-0.035em] sm:text-6xl`}>See what is booked, paid and still available.</h2><p className="mt-5 text-base font-medium leading-7 text-[#60766a]">Bookie keeps your services, staff, availability, bookings and deposit status together—so you can stop managing appointments across scattered messages.</p><div className="mt-7 grid gap-3 sm:grid-cols-2">{["One organised dashboard", "Live schedule visibility", "Staff and service setup", "Payment status at a glance"].map((item) => <div key={item} className="flex items-center gap-3 rounded-xl border border-[#dce6df] bg-white px-4 py-3 text-sm font-bold"><CheckCircle size={19} weight="fill" className="shrink-0 text-[#0f6b4f]" />{item}</div>)}</div></div>
+          </div>
+
+          <div className="mt-20 grid gap-5 sm:grid-cols-2 lg:grid-cols-4">
+            {featureCards.map(({ icon: Icon, title, description, badge }) => (
+              <article key={title} className="rounded-2xl border border-[#dfe7e1] bg-white p-6">
+                <div className="flex items-start justify-between gap-3"><span className="grid h-12 w-12 place-items-center rounded-xl bg-[#e9f3ec] text-[#0f6b4f]"><Icon size={24} weight="duotone" /></span>{badge && <span className="rounded-full bg-[#fff0df] px-2.5 py-1 text-[9px] font-black uppercase tracking-[0.08em] text-[#8a5525]">{badge}</span>}</div>
+                <h3 className="mt-6 text-lg font-black tracking-[-0.025em]">{title}</h3><p className="mt-3 text-sm font-medium leading-6 text-[#60766a]">{description}</p>
               </article>
             ))}
           </div>
@@ -256,32 +261,19 @@ export default function HomePage() {
       <section id="ai-front-desk" className="mx-auto max-w-7xl scroll-mt-20 px-5 py-24 sm:px-8">
         <div className="overflow-hidden rounded-[2rem] bg-[#082f22] text-white">
           <div className="grid gap-10 px-7 py-10 sm:px-12 sm:py-14 lg:grid-cols-[0.9fr_1.1fr] lg:px-16 lg:py-16">
-            <div>
-              <span className="inline-flex items-center gap-2 rounded-full bg-[#ffdfcc] px-3 py-1.5 text-xs font-black uppercase tracking-[0.12em] text-[#7b401d]"><Sparkle size={14} weight="fill" /> Coming soon</span>
-              <h2 className="mt-6 text-4xl font-black leading-tight tracking-[-0.045em] sm:text-5xl">An AI front desk that knows when to call you in.</h2>
-              <p className="mt-5 max-w-xl text-base font-medium leading-7 text-white/70">Bookie will handle routine enquiries, check real availability, guide clients into the booking flow, and hand unusual requests to you with the context attached.</p>
-            </div>
+            <div><span className="inline-flex items-center gap-2 rounded-full bg-[#ffdfcc] px-3 py-1.5 text-[10px] font-black uppercase tracking-[0.12em] text-[#7b401d]"><Sparkle size={14} weight="fill" /> Coming soon</span><h2 className={`${displayFont.className} mt-6 text-5xl font-normal leading-[1.02] tracking-[-0.035em] sm:text-6xl`}>An AI front desk that knows when to call you in.</h2><p className="mt-5 max-w-xl text-base font-medium leading-7 text-white/70">Bookie will handle routine enquiries, check real availability, guide people into the booking flow, and hand unusual requests to you with the context attached.</p></div>
             <div className="grid gap-3 self-center">
-              {["Answer common questions through messaging channels", "Use your real services, staff and availability", "Prepare bookings without bypassing confirmation", "Pause immediately when a human takes over"].map((item) => (
-                <div key={item} className="flex items-center gap-4 rounded-2xl border border-white/10 bg-white/[0.06] px-5 py-4 text-sm font-bold"><span className="grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-[#0f6b4f]"><Check size={17} weight="bold" /></span>{item}</div>
-              ))}
-              <div className="mt-2 flex items-center gap-3 text-sm font-semibold text-[#b9d6c8]"><Robot size={23} weight="duotone" /> Being built carefully, with human handoff and booking safeguards from day one.</div>
+              {["Answer common questions through messaging channels", "Use your real services, staff and availability", "Prepare bookings without bypassing confirmation", "Pause immediately when a human takes over"].map((item) => <div key={item} className="flex items-center gap-4 rounded-2xl border border-white/10 bg-white/[0.06] px-5 py-4 text-sm font-bold"><span className="grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-[#0f6b4f]"><Check size={17} weight="bold" /></span>{item}</div>)}
+              <div className="mt-2 flex items-center gap-3 text-sm font-semibold text-[#b9d6c8]"><Robot size={23} weight="duotone" /> Human handoff and booking safeguards from day one.</div>
             </div>
           </div>
         </div>
       </section>
 
-      <section className="mx-auto max-w-7xl px-5 pb-24 sm:px-8">
-        <div className="rounded-[2rem] border border-[#e1e9e4] bg-[#f6faf6] p-6 sm:p-10 lg:p-12">
-          <div className="mb-10 flex flex-col justify-between gap-5 lg:flex-row lg:items-end"><div><p className="text-xs font-black uppercase tracking-[0.18em] text-[#0f6b4f]">The customer experience</p><h2 className="mt-3 text-4xl font-black tracking-[-0.045em]">Four clear steps. No back-and-forth.</h2></div><Link href="/book/bookie-live-demo" className="inline-flex min-h-11 items-center justify-center rounded-xl border border-[#0f6b4f] bg-white px-5 text-sm font-bold text-[#0f6b4f] hover:bg-[#eef6f1]">Try the live booking page</Link></div>
-          <CustomerJourney />
-        </div>
-      </section>
-
-      <section className="bg-[#0a4d37] px-5 py-20 text-white sm:px-8">
-        <div className="mx-auto flex max-w-6xl flex-col justify-between gap-8 lg:flex-row lg:items-center">
-          <div><h2 className="max-w-2xl text-4xl font-black tracking-[-0.045em] sm:text-5xl">Spend less time arranging appointments.</h2><p className="mt-4 text-base font-medium text-white/70">Create your booking page in minutes and start accepting bookings and deposits.</p></div>
-          <Link href="/register" className="inline-flex min-h-14 shrink-0 items-center justify-center gap-2 rounded-xl bg-white px-7 text-sm font-black text-[#0a4d37] shadow-[0_18px_35px_rgba(0,0,0,0.16)] transition hover:-translate-y-0.5">Create your booking page <ArrowRight size={17} weight="bold" /></Link>
+      <section className="px-5 pb-24 sm:px-8">
+        <div className="mx-auto flex max-w-7xl flex-col items-center justify-between gap-8 rounded-[2rem] border border-[#eadfc9] bg-[#fbf0d9] px-7 py-12 text-center lg:flex-row lg:px-14 lg:text-left">
+          <div><p className="text-[11px] font-black uppercase tracking-[0.16em] text-[#0f6b4f]">Ready when you are</p><h2 className={`${displayFont.className} mt-3 max-w-3xl text-5xl font-normal leading-[1.02] tracking-[-0.035em] sm:text-6xl`}>Spend less time arranging bookings in messages.</h2><p className="mt-4 text-base font-medium text-[#60766a]">Create your Bookie page and start sharing one clear link.</p></div>
+          <Link href="/register" className="inline-flex min-h-14 shrink-0 items-center justify-center gap-2 rounded-xl bg-[#0f6b4f] px-7 text-sm font-black text-white shadow-[0_18px_35px_rgba(15,107,79,0.18)] transition hover:-translate-y-0.5 hover:bg-[#0a563f]">Create your booking page <ArrowRight size={17} weight="bold" /></Link>
         </div>
       </section>
 

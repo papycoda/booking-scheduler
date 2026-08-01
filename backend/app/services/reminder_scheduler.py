@@ -1,4 +1,5 @@
 import logging
+from datetime import UTC, datetime
 
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 
@@ -47,8 +48,23 @@ async def run_whatsapp_retry_job() -> None:
 def start_scheduler() -> None:
     if scheduler.running:
         return
-    scheduler.add_job(run_reminder_job, "interval", minutes=15, id="booking-reminders", replace_existing=True)
+    scheduler.add_job(
+        run_reminder_job,
+        "interval",
+        minutes=15,
+        id="booking-reminders",
+        replace_existing=True,
+        next_run_time=datetime.now(UTC),
+        coalesce=True,
+        max_instances=1,
+        misfire_grace_time=900,
+    )
     scheduler.add_job(run_payment_lifecycle_job, "interval", minutes=5, id="payment-lifecycle", replace_existing=True)
     scheduler.add_job(run_stale_booking_cleanup_job, "interval", minutes=5, id="stale-booking-cleanup", replace_existing=True)
     scheduler.add_job(run_whatsapp_retry_job, "interval", minutes=3, id="whatsapp-payment-retry", replace_existing=True)
     scheduler.start()
+
+
+def stop_scheduler() -> None:
+    if scheduler.running:
+        scheduler.shutdown(wait=False)
