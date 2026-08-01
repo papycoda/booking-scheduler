@@ -53,13 +53,12 @@ const featureCards = [
   {
     icon: CreditCard,
     title: "Deposits before confirmation",
-    description: "Use Paystack to collect the amount you require before a booking is secured.",
+    description: "Collect the amount you require before a booking is secured.",
   },
   {
     icon: BellRinging,
     title: "Automatic reminders",
     description: "Help clients remember upcoming appointments with scheduled email and messaging reminders.",
-    badge: "Available now",
   },
   {
     icon: UsersThree,
@@ -212,7 +211,7 @@ export default function HomePage() {
           </div>
           <div className="mt-6 flex flex-wrap gap-x-5 gap-y-2 text-xs font-bold text-[#60766a]">
             <span className="flex items-center gap-2"><Check size={15} weight="bold" className="text-[#0f6b4f]" /> No customer account</span>
-            <span className="flex items-center gap-2"><Check size={15} weight="bold" className="text-[#0f6b4f]" /> Paystack deposits</span>
+            <span className="flex items-center gap-2"><Check size={15} weight="bold" className="text-[#0f6b4f]" /> Secure deposits</span>
             <span className="flex items-center gap-2"><Check size={15} weight="bold" className="text-[#0f6b4f]" /> Real availability</span>
           </div>
         </div>
@@ -248,9 +247,9 @@ export default function HomePage() {
           </div>
 
           <div className="mt-20 grid gap-5 sm:grid-cols-2 lg:grid-cols-4">
-            {featureCards.map(({ icon: Icon, title, description, badge }) => (
+            {featureCards.map(({ icon: Icon, title, description }) => (
               <article key={title} className="rounded-2xl border border-[#dfe7e1] bg-white p-6">
-                <div className="flex items-start justify-between gap-3"><span className="grid h-12 w-12 place-items-center rounded-xl bg-[#e9f3ec] text-[#0f6b4f]"><Icon size={24} weight="duotone" /></span>{badge && <span className="rounded-full bg-[#fff0df] px-2.5 py-1 text-[9px] font-black uppercase tracking-[0.08em] text-[#8a5525]">{badge}</span>}</div>
+                <span className="grid h-12 w-12 place-items-center rounded-xl bg-[#e9f3ec] text-[#0f6b4f]"><Icon size={24} weight="duotone" /></span>
                 <h3 className="mt-6 text-lg font-black tracking-[-0.025em]">{title}</h3><p className="mt-3 text-sm font-medium leading-6 text-[#60766a]">{description}</p>
               </article>
             ))}

@@ -28,7 +28,7 @@ The source and the browser-rendered desktop hero were normalized to a common 768
 - Spacing and layout rhythm: the hero uses the reference's spacious two-column balance and collapses to a deliberate single-column mobile flow. Section gaps, card padding, radii, and elevation are consistent; measured horizontal overflow is 0 px at both breakpoints.
 - Colors and visual tokens: warm ivory and cream surfaces, dark forest-green type and CTAs, muted green supporting text, and restrained peach accents match the source direction with accessible contrast.
 - Image quality and asset fidelity: the real Bookie studio image is sharp and correctly cropped in the booking preview. Phosphor icons are used for functional iconography; no placeholder or handcrafted SVG assets were introduced.
-- Copy and content: messaging is broad enough for anything people can book. Reminders are labelled `Available now`; the AI front desk remains honestly labelled `Coming soon`. CTAs describe the destination rather than claiming an unconfigured free trial.
+- Copy and content: messaging is broad enough for anything people can book. Payment benefits stay provider-neutral, reminders appear as a standard live feature without a status badge, and the AI front desk remains honestly labelled `Coming soon`. CTAs describe the destination rather than claiming an unconfigured free trial.
 
 ## Findings
 
