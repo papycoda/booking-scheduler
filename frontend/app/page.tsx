@@ -5,17 +5,14 @@ import {
   ArrowRight,
   BellRinging,
   CalendarBlank,
-  CalendarCheck,
   Check,
   CheckCircle,
   Clock,
   CreditCard,
-  LinkSimple,
   Robot,
   ShieldCheck,
   Sparkle,
   SquaresFour,
-  Storefront,
   UserCircle,
   UsersThree,
 } from "@phosphor-icons/react/ssr";
@@ -25,19 +22,22 @@ const displayFont = DM_Serif_Display({ subsets: ["latin"], weight: "400", displa
 
 const steps = [
   {
-    icon: Storefront,
+    image: "/landing/set-up-services.webp",
+    imageAlt: "A business owner setting up bookable services and availability",
     number: "1",
     title: "Set up what people can book",
     description: "Add services, sessions, spaces or experiences, then set the price, duration and availability.",
   },
   {
-    icon: LinkSimple,
+    image: "/landing/share-your-link.webp",
+    imageAlt: "A business owner sharing a Bookie booking link from a phone",
     number: "2",
     title: "Share your Bookie link",
     description: "Send it on WhatsApp, Instagram, your website or anywhere people already find you.",
   },
   {
-    icon: CalendarCheck,
+    image: "/landing/get-booked.webp",
+    imageAlt: "A service professional welcoming a client for a confirmed booking",
     number: "3",
     title: "Get booked and paid",
     description: "Clients choose a real available time and pay the required deposit to confirm their booking.",
@@ -230,10 +230,15 @@ export default function HomePage() {
       <section id="how-it-works" className="mx-auto max-w-7xl scroll-mt-20 px-5 py-24 sm:px-8">
         <div className="mx-auto max-w-2xl text-center"><p className="text-[11px] font-black uppercase tracking-[0.16em] text-[#0f6b4f]">How it works</p><h2 className={`${displayFont.className} mt-3 text-5xl font-normal leading-[1.02] tracking-[-0.035em] sm:text-6xl`}>From enquiry to confirmed booking.</h2><p className="mt-4 text-base font-medium leading-7 text-[#60766a]">A clear path for you and the people booking with you.</p></div>
         <div className="mt-14 grid gap-5 md:grid-cols-3">
-          {steps.map(({ icon: Icon, number, title, description }) => (
-            <article key={number} className="rounded-2xl border border-[#e2e8e3] bg-white p-6 shadow-[0_18px_45px_rgba(20,55,40,0.06)]">
-              <div className="flex items-start justify-between"><span className="grid h-14 w-14 place-items-center rounded-2xl bg-[#fbefd9] text-[#8a5525]"><Icon size={27} weight="duotone" /></span><span className="text-4xl font-black text-[#eadcbe]">{number}.</span></div>
-              <h3 className="mt-7 text-xl font-black tracking-[-0.03em]">{title}</h3><p className="mt-3 text-sm font-medium leading-6 text-[#60766a]">{description}</p>
+          {steps.map(({ image, imageAlt, number, title, description }) => (
+            <article key={number} className="group overflow-hidden rounded-[1.4rem] border border-[#e6e3d9] bg-[#fffdf8] shadow-[0_18px_45px_rgba(20,55,40,0.07)] transition duration-300 hover:-translate-y-1 hover:shadow-[0_24px_55px_rgba(20,55,40,0.11)]">
+              <div className="relative aspect-[4/3] overflow-hidden border-b border-[#eee8da] bg-[#fffdf8] px-4 pt-3">
+                <Image src={image} alt={imageAlt} fill className="object-contain object-center transition duration-500 group-hover:scale-[1.025]" sizes="(min-width: 768px) 33vw, 100vw" />
+                <span className="absolute left-5 top-5 grid h-10 w-10 place-items-center rounded-full border border-[#e8d8b5] bg-[#fffaf0]/95 text-sm font-black text-[#9a6b20] shadow-sm">{number}</span>
+              </div>
+              <div className="p-6 pt-5">
+                <h3 className="text-xl font-black tracking-[-0.03em]">{title}</h3><p className="mt-3 text-sm font-medium leading-6 text-[#60766a]">{description}</p>
+              </div>
             </article>
           ))}
         </div>
