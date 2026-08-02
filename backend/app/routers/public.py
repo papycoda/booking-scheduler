@@ -4,6 +4,7 @@ from typing import Annotated
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response, UploadFile, status
+from fastapi.responses import RedirectResponse
 from pydantic import ValidationError
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -36,6 +37,8 @@ from app.services.booking_management_service import (
     create_reschedule_request,
 )
 from app.services.pricing_service import calculate_deposit_due_now, price_label_for_service
+from app.services.image_storage import CloudinaryImageStorage, get_image_storage
+from app.services.inspo_service import verify_inspo_signature
 
 router = APIRouter(prefix="/book", tags=["public booking"])
 
@@ -295,8 +298,12 @@ async def public_inspo_asset(
     slug: str,
     stored_filename: str,
     db: Annotated[AsyncSession, Depends(get_db)],
+    expires: Annotated[int, Query()],
+    signature: Annotated[str, Query(min_length=64, max_length=64)],
 ) -> Response:
     tenant = await get_public_tenant(db, slug)
+    if not verify_inspo_signature(tenant_id=tenant.id, stored_filename=stored_filename, expires=expires, signature=signature):
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail={"error": "INSPO_LINK_INVALID", "message": "This image link is invalid or has expired."})
     result = await db.execute(
         select(BookingInspoAsset).where(
             BookingInspoAsset.tenant_id == tenant.id,
@@ -304,9 +311,17 @@ async def public_inspo_asset(
         )
     )
     asset = result.scalar_one_or_none()
-    if asset is None or asset.data is None:
+    if asset is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail={"error": "INSPO_NOT_FOUND", "message": "Inspiration image was not found."})
-    return Response(content=asset.data, media_type=asset.content_type, headers={"X-Content-Type-Options": "nosniff"})
+    if getattr(asset, "storage_provider", "database") == "cloudinary":
+        storage = get_image_storage()
+        if not isinstance(storage, CloudinaryImageStorage) or not asset.storage_key or not asset.storage_format:
+            raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail={"error": "INSPO_STORAGE_UNAVAILABLE", "message": "This image is temporarily unavailable."})
+        download_url = storage.private_download_url(key=asset.storage_key, image_format=asset.storage_format, expires_at=min(expires, int(datetime.now(UTC).timestamp()) + 300))
+        return RedirectResponse(download_url, status_code=status.HTTP_307_TEMPORARY_REDIRECT, headers={"Cache-Control": "private, no-store", "X-Content-Type-Options": "nosniff"})
+    if asset.data is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail={"error": "INSPO_NOT_FOUND", "message": "Inspiration image was not found."})
+    return Response(content=asset.data, media_type=asset.content_type, headers={"Cache-Control": "private, no-store", "X-Content-Type-Options": "nosniff"})
 
 
 @router.post("/{slug}/bookings/{booking_id}/cancel", status_code=204)

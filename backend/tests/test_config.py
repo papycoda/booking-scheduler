@@ -48,6 +48,24 @@ class SettingsTests(unittest.TestCase):
         with self.assertRaisesRegex(ValidationError, "must be configured together"):
             make_settings(twilio_account_sid="AC123")
 
+    def test_cloudinary_configuration_must_be_complete(self):
+        with self.assertRaisesRegex(ValidationError, "must be configured together"):
+            make_settings(cloudinary_cloud_name="demo")
+
+    def test_cloudinary_provider_requires_credentials(self):
+        with self.assertRaisesRegex(ValidationError, "Cloudinary credentials are required"):
+            make_settings(image_storage_provider="cloudinary")
+
+    def test_cloudinary_provider_accepts_complete_credentials(self):
+        settings = make_settings(
+            image_storage_provider="cloudinary",
+            cloudinary_cloud_name="demo",
+            cloudinary_api_key="key",
+            cloudinary_api_secret="secret",
+        )
+
+        self.assertEqual(settings.image_storage_provider, "cloudinary")
+
     def test_production_rejects_demo_http_and_missing_providers(self):
         with self.assertRaises(ValidationError) as raised:
             make_settings(environment="production")

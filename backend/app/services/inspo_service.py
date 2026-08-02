@@ -1,11 +1,24 @@
+import hashlib
+import hmac
+import time
+from dataclasses import dataclass
+from urllib.parse import urlencode
 from uuid import UUID, uuid4
 
 from fastapi import HTTPException, UploadFile, status
 
 from app.config import settings
 from app.models.booking import BookingInspoAsset
+from app.services.image_storage import ImageStorageError, get_image_storage
 
 ALLOWED_IMAGE_TYPES = {"image/jpeg", "image/png", "image/webp"}
+
+
+@dataclass(frozen=True)
+class ValidatedImage:
+    filename: str
+    content_type: str
+    content: bytes
 
 
 def content_matches_declared_image_type(content_type: str, content: bytes) -> bool:
@@ -18,7 +31,7 @@ def content_matches_declared_image_type(content_type: str, content: bytes) -> bo
     return False
 
 
-async def save_inspo_images(*, tenant_id: UUID, booking_id: UUID, slug: str, files: list[UploadFile]) -> list[BookingInspoAsset]:
+async def validate_inspo_images(files: list[UploadFile]) -> list[ValidatedImage]:
     if len(files) > settings.max_inspo_images:
         raise HTTPException(
             status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
@@ -26,7 +39,7 @@ async def save_inspo_images(*, tenant_id: UUID, booking_id: UUID, slug: str, fil
         )
 
     total_size = 0
-    assets: list[BookingInspoAsset] = []
+    validated: list[ValidatedImage] = []
 
     for file in files:
         content_type = file.content_type or ""
@@ -51,18 +64,80 @@ async def save_inspo_images(*, tenant_id: UUID, booking_id: UUID, slug: str, fil
                 detail={"error": "INSPO_IMAGE_TOO_LARGE", "message": "One or more inspiration images are too large."},
             )
 
-        stored_filename = str(uuid4())
-        assets.append(
-            BookingInspoAsset(
-                booking_id=booking_id,
-                tenant_id=tenant_id,
-                original_filename=file.filename or "image",
-                stored_filename=stored_filename,
+        validated.append(
+            ValidatedImage(
+                filename=file.filename or "image",
                 content_type=content_type,
-                size_bytes=size,
-                url=f"/book/{slug}/inspo/{stored_filename}",
-                data=content,
+                content=content,
             )
         )
+    return validated
+
+
+async def save_inspo_images(
+    *,
+    tenant_id: UUID,
+    booking_id: UUID,
+    slug: str,
+    files: list[UploadFile],
+    storage=None,
+) -> list[BookingInspoAsset]:
+    validated = await validate_inspo_images(files)
+    image_storage = storage or get_image_storage()
+    assets: list[BookingInspoAsset] = []
+    stored_keys: list[str] = []
+    try:
+        for image in validated:
+            stored_filename = str(uuid4())
+            stored = await image_storage.store(
+                tenant_id=str(tenant_id),
+                booking_id=str(booking_id),
+                object_id=stored_filename,
+                filename=image.filename,
+                content_type=image.content_type,
+                content=image.content,
+            )
+            if stored.key:
+                stored_keys.append(stored.key)
+            assets.append(
+                BookingInspoAsset(
+                    booking_id=booking_id,
+                    tenant_id=tenant_id,
+                    original_filename=image.filename,
+                    stored_filename=stored_filename,
+                    content_type=image.content_type,
+                    size_bytes=len(image.content),
+                    url=f"/book/{slug}/inspo/{stored_filename}",
+                    data=stored.data,
+                    storage_provider=stored.provider,
+                    storage_key=stored.key,
+                    storage_format=stored.format,
+                )
+            )
+    except ImageStorageError as exc:
+        for key in stored_keys:
+            try:
+                await image_storage.delete(key=key)
+            except ImageStorageError:
+                pass
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail={"error": "INSPO_STORAGE_UNAVAILABLE", "message": "Images could not be saved right now. Please try again."},
+        ) from exc
 
     return assets
+
+
+def signed_inspo_url(asset: BookingInspoAsset, *, ttl_seconds: int = 3600) -> str:
+    expires = int(time.time()) + ttl_seconds
+    payload = f"{asset.tenant_id}:{asset.stored_filename}:{expires}"
+    signature = hmac.new(settings.secret_key.encode(), payload.encode(), hashlib.sha256).hexdigest()
+    return f"{asset.url}?{urlencode({'expires': expires, 'signature': signature})}"
+
+
+def verify_inspo_signature(*, tenant_id: UUID, stored_filename: str, expires: int, signature: str) -> bool:
+    if expires < int(time.time()):
+        return False
+    payload = f"{tenant_id}:{stored_filename}:{expires}"
+    expected = hmac.new(settings.secret_key.encode(), payload.encode(), hashlib.sha256).hexdigest()
+    return hmac.compare_digest(expected, signature)

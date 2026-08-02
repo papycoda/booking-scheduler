@@ -110,4 +110,7 @@ class BookingInspoAsset(UUIDPrimaryKeyMixin, Base):
     size_bytes: Mapped[int] = mapped_column(Integer, nullable=False)
     url: Mapped[str] = mapped_column(String(500), nullable=False)
     data: Mapped[bytes | None] = mapped_column(LargeBinary)
+    storage_provider: Mapped[str] = mapped_column(String(30), nullable=False, server_default="database")
+    storage_key: Mapped[str | None] = mapped_column(String(500))
+    storage_format: Mapped[str | None] = mapped_column(String(20))
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, server_default=text("NOW()"))

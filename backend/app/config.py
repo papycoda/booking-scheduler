@@ -1,4 +1,5 @@
 from functools import lru_cache
+from typing import Literal
 
 from pydantic import AnyHttpUrl, Field, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -28,6 +29,10 @@ class Settings(BaseSettings):
     max_inspo_images: int = 4
     max_inspo_image_bytes: int = 5 * 1024 * 1024
     max_inspo_total_bytes: int = 15 * 1024 * 1024
+    image_storage_provider: Literal["database", "cloudinary"] = "database"
+    cloudinary_cloud_name: str | None = None
+    cloudinary_api_key: str | None = None
+    cloudinary_api_secret: str | None = None
     access_token_minutes: int = 15
     refresh_token_days: int = 7
 
@@ -50,6 +55,19 @@ class Settings(BaseSettings):
             raise ValueError(
                 "TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN, and TWILIO_WHATSAPP_FROM_NUMBER must be configured together."
             )
+
+        cloudinary_values = (
+            self.cloudinary_cloud_name,
+            self.cloudinary_api_key,
+            self.cloudinary_api_secret,
+        )
+        configured_cloudinary_values = sum(bool((value or "").strip()) for value in cloudinary_values)
+        if configured_cloudinary_values not in (0, len(cloudinary_values)):
+            raise ValueError(
+                "CLOUDINARY_CLOUD_NAME, CLOUDINARY_API_KEY, and CLOUDINARY_API_SECRET must be configured together."
+            )
+        if self.image_storage_provider == "cloudinary" and configured_cloudinary_values != len(cloudinary_values):
+            raise ValueError("Cloudinary credentials are required when IMAGE_STORAGE_PROVIDER=cloudinary.")
 
         if self.environment != "production":
             return self

@@ -76,9 +76,13 @@ class FakeJsonRequest:
 class PublicRouterTests(unittest.IsolatedAsyncioTestCase):
     def setUp(self) -> None:
         self.original_get_public_tenant = public_router.get_public_tenant
+        self.original_verify_inspo_signature = public_router.verify_inspo_signature
+        self.original_get_image_storage = public_router.get_image_storage
 
     def tearDown(self) -> None:
         public_router.get_public_tenant = self.original_get_public_tenant
+        public_router.verify_inspo_signature = self.original_verify_inspo_signature
+        public_router.get_image_storage = self.original_get_image_storage
 
     async def test_public_staff_rejects_service_outside_tenant(self):
         tenant = SimpleNamespace(id=uuid4())
@@ -130,23 +134,84 @@ class PublicRouterTests(unittest.IsolatedAsyncioTestCase):
 
     async def test_public_inspo_asset_returns_database_image_bytes(self):
         tenant = SimpleNamespace(id=uuid4())
-        asset = SimpleNamespace(data=b"image-bytes", content_type="image/jpeg")
+        asset = SimpleNamespace(data=b"image-bytes", content_type="image/jpeg", storage_provider="database")
 
         async def get_public_tenant(_db, _slug):
             return tenant
 
         public_router.get_public_tenant = get_public_tenant
+        public_router.verify_inspo_signature = lambda **_kwargs: True
 
         response = await public_router.public_inspo_asset.__wrapped__(
             SimpleNamespace(),
             "tenant-slug",
             "stored-id",
             FakeSession([FakeResult(scalar=asset)]),
+            expires=9999999999,
+            signature="a" * 64,
         )
 
         self.assertEqual(response.body, b"image-bytes")
         self.assertEqual(response.media_type, "image/jpeg")
         self.assertEqual(response.headers["X-Content-Type-Options"], "nosniff")
+
+    async def test_public_inspo_asset_rejects_unsigned_or_expired_link(self):
+        tenant = SimpleNamespace(id=uuid4())
+
+        async def get_public_tenant(_db, _slug):
+            return tenant
+
+        public_router.get_public_tenant = get_public_tenant
+        public_router.verify_inspo_signature = lambda **_kwargs: False
+
+        with self.assertRaises(Exception) as raised:
+            await public_router.public_inspo_asset.__wrapped__(
+                SimpleNamespace(),
+                "tenant-slug",
+                "stored-id",
+                FakeSession([]),
+                expires=1,
+                signature="a" * 64,
+            )
+
+        self.assertEqual(getattr(raised.exception, "status_code", None), 403)
+
+    async def test_public_inspo_asset_redirects_cloudinary_asset_to_private_download(self):
+        tenant = SimpleNamespace(id=uuid4())
+        asset = SimpleNamespace(
+            data=None,
+            content_type="image/jpeg",
+            storage_provider="cloudinary",
+            storage_key="asset-key",
+            storage_format="jpg",
+        )
+
+        async def get_public_tenant(_db, _slug):
+            return tenant
+
+        class FakeCloudinaryStorage(public_router.CloudinaryImageStorage):
+            def __init__(self):
+                pass
+
+            def private_download_url(self, **_kwargs):
+                return "https://api.cloudinary.test/private-download"
+
+        public_router.get_public_tenant = get_public_tenant
+        public_router.verify_inspo_signature = lambda **_kwargs: True
+        public_router.get_image_storage = lambda: FakeCloudinaryStorage()
+
+        response = await public_router.public_inspo_asset.__wrapped__(
+            SimpleNamespace(),
+            "tenant-slug",
+            "stored-id",
+            FakeSession([FakeResult(scalar=asset)]),
+            expires=9999999999,
+            signature="a" * 64,
+        )
+
+        self.assertEqual(response.status_code, 307)
+        self.assertEqual(response.headers["location"], "https://api.cloudinary.test/private-download")
+        self.assertEqual(response.headers["cache-control"], "private, no-store")
 
     async def test_public_booking_parser_returns_field_errors(self):
         with self.assertRaises(Exception) as raised:

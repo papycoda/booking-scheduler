@@ -24,6 +24,7 @@ from app.schemas.dashboard import (
     DashboardRescheduleRequestResponse,
 )
 from app.services.booking_management_service import decide_reschedule_request, dashboard_reschedule_row_to_response
+from app.services.inspo_service import signed_inspo_url
 from app.services.settlement_service import approve_payout, initiate_platform_collected_payout
 
 router = APIRouter(prefix="/dashboard", tags=["dashboard"])
@@ -60,7 +61,7 @@ def booking_row_to_response(row, assets_by_booking: dict[UUID, list[BookingInspo
                 "original_filename": asset.original_filename,
                 "content_type": asset.content_type,
                 "size_bytes": asset.size_bytes,
-                "url": asset.url,
+                "url": signed_inspo_url(asset),
             }
             for asset in assets
         ],
