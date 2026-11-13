@@ -82,6 +82,25 @@ class TenantRouterTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(response.slug, "ada-hair-prime")
         self.assertEqual(response.name, "Ada Hair Prime")
 
+    async def test_update_current_tenant_ignores_platform_fee_percentage(self):
+        tenant = SimpleNamespace(
+            id=uuid4(),
+            slug="ada-hair",
+            name="Ada Hair",
+            platform_fee_percentage=Decimal("5.00"),
+        )
+        payload = TenantUpdateRequest.model_validate({"name": "Ada Hair Studio", "platform_fee_percentage": 0})
+
+        response = await tenant_router.update_current_tenant(
+            payload,
+            SimpleNamespace(tenant_id=tenant.id),
+            FakeTenantSession(tenant),
+        )
+
+        self.assertNotIn("platform_fee_percentage", payload.model_dump())
+        self.assertEqual(tenant.platform_fee_percentage, Decimal("5.00"))
+        self.assertEqual(response.name, "Ada Hair Studio")
+
     async def test_update_current_tenant_rejects_taken_slug(self):
         tenant = SimpleNamespace(
             id=uuid4(),

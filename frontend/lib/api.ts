@@ -345,6 +345,7 @@ export const api = {
     request<{ booking_id: string; payment_url: string; reference: string; expires_at: string; deposit_amount: number; manage_url: string }>(`/book/${slug}/bookings`, {
       method: "POST",
       body: body instanceof FormData ? body : JSON.stringify(body),
+      token: getAccessToken() || undefined,
     }),
   bookingStatus: (slug: string, bookingId: string, token?: string) =>
     request<{ booking_status?: string; manage_url?: string | null }>(`/book/${slug}/bookings/${bookingId}/status${token ? `?token=${encodeURIComponent(token)}` : ""}`),

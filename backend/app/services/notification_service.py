@@ -1,3 +1,4 @@
+import html as html_lib
 import logging
 from datetime import UTC, datetime, timedelta
 
@@ -26,7 +27,7 @@ async def send_email(*, to_email: str, subject: str, text: str, html: str | None
         "to": [to_email],
         "subject": subject,
         "text": text,
-        "html": html or f"<p>{text}</p>",
+        "html": html or f"<p>{html_lib.escape(text)}</p>",
     }
     headers = {"Authorization": f"Bearer {settings.resend_api_key}"}
     async with httpx.AsyncClient(timeout=15) as client:
@@ -39,7 +40,11 @@ async def send_password_reset_email(*, to_email: str, reset_url: str) -> None:
         to_email=to_email,
         subject="Reset your booking scheduler password",
         text=f"Use this link to reset your password: {reset_url}. This link expires in 1 hour.",
-        html=f"<p>Use this link to reset your password:</p><p><a href=\"{reset_url}\">{reset_url}</a></p><p>This link expires in 1 hour.</p>",
+        html=(
+            "<p>Use this link to reset your password:</p>"
+            f"<p><a href=\"{html_lib.escape(reset_url, quote=True)}\">{html_lib.escape(reset_url)}</a></p>"
+            "<p>This link expires in 1 hour.</p>"
+        ),
     )
 
 

@@ -9,7 +9,9 @@ os.environ.setdefault("DATABASE_URL", "postgresql+asyncpg://user:pass@localhost/
 os.environ.setdefault("REDIS_URL", "redis://localhost:6379")
 os.environ.setdefault("PAYSTACK_SECRET_KEY", "sk_test_x")
 
-from app.services.payment_provider import build_payment_plan  # noqa: E402
+from app.config import settings  # noqa: E402
+from app.services import payment_provider  # noqa: E402
+from app.services.payment_provider import build_payment_plan, initialize_checkout_payment  # noqa: E402
 
 
 class PaymentProviderTests(unittest.TestCase):
@@ -55,3 +57,59 @@ class PaymentProviderTests(unittest.TestCase):
         self.assertEqual(plan.business_net_amount, 37_000)
         self.assertEqual(plan.transaction_charge, 3_000)
         self.assertEqual(plan.bearer, "subaccount")
+
+
+class DemoCheckoutTests(unittest.IsolatedAsyncioTestCase):
+    def setUp(self) -> None:
+        self.original_demo_mode = settings.demo_mode
+        self.original_demo_admin_emails = settings.demo_admin_emails
+        self.original_initialize_transaction = payment_provider.initialize_transaction
+        settings.demo_mode = True
+        settings.demo_admin_emails = "admin@example.com"
+
+    def tearDown(self) -> None:
+        settings.demo_mode = self.original_demo_mode
+        settings.demo_admin_emails = self.original_demo_admin_emails
+        payment_provider.initialize_transaction = self.original_initialize_transaction
+
+    async def test_customer_email_does_not_select_demo_checkout(self):
+        calls = []
+
+        async def initialize_transaction(**kwargs):
+            calls.append(kwargs)
+            return {"authorization_url": "https://checkout.paystack.com/real", "access_code": "real_access"}
+
+        payment_provider.initialize_transaction = initialize_transaction
+        tenant = SimpleNamespace(payment_setup_status="not_started", paystack_subaccount_code=None, platform_fee_percentage=5)
+
+        data, _plan = await initialize_checkout_payment(
+            email="admin@example.com",
+            amount=1_000,
+            reference="bk_reference",
+            tenant=tenant,
+            callback_url="http://localhost:3000/book/ada/verify",
+            metadata={"booking_id": "booking"},
+        )
+
+        self.assertEqual(data["authorization_url"], "https://checkout.paystack.com/real")
+        self.assertEqual(calls[0]["email"], "admin@example.com")
+
+    async def test_authenticated_demo_admin_selects_demo_checkout(self):
+        async def initialize_transaction(**_kwargs):
+            raise AssertionError("demo admin checkout should not call Paystack")
+
+        payment_provider.initialize_transaction = initialize_transaction
+        tenant = SimpleNamespace(payment_setup_status="not_started", paystack_subaccount_code=None, platform_fee_percentage=5)
+
+        data, _plan = await initialize_checkout_payment(
+            email="customer@example.com",
+            amount=1_000,
+            reference="bk_reference",
+            tenant=tenant,
+            callback_url="http://localhost:3000/book/ada/verify",
+            metadata={"booking_id": "booking"},
+            actor_email="admin@example.com",
+        )
+
+        self.assertIn("/demo/pay?", data["authorization_url"])
+        self.assertTrue(data["access_code"].startswith("demo_access_"))

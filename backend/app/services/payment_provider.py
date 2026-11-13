@@ -95,11 +95,12 @@ async def initialize_checkout_payment(
     tenant: Tenant,
     callback_url: str,
     metadata: dict[str, str],
+    actor_email: str | None = None,
 ) -> tuple[dict, PaymentPlan]:
     plan = build_payment_plan(tenant, amount)
 
-    # Demo mode is only available to authorized admin emails
-    if settings.demo_mode and is_demo_admin(email):
+    # Demo checkout follows the authenticated caller, never the customer email on the booking.
+    if settings.demo_mode and actor_email and is_demo_admin(actor_email):
         extended_metadata = {
             **metadata,
             "provider": plan.provider,

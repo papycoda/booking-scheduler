@@ -113,6 +113,25 @@ class NotificationServiceTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(call["json"]["text"], "Your appointment is confirmed.")
         self.assertEqual(call["json"]["html"], "<p>Your appointment is confirmed.</p>")
 
+    async def test_send_email_escapes_text_when_building_html(self):
+        svc.httpx.AsyncClient = FakeAsyncClient
+        svc.settings.resend_api_key = "re_test"
+        svc.settings.from_email = "bookings@example.com"
+
+        await svc.send_email(
+            to_email="owner@example.com",
+            subject="New booking",
+            text='New booking: </p><a href="https://evil.example">Confirm payout</a>',
+        )
+
+        html_body = FakeAsyncClient.calls[0]["json"]["html"]
+        self.assertNotIn("<a href", html_body)
+        self.assertIn("&lt;/p&gt;&lt;a href=&quot;https://evil.example&quot;&gt;", html_body)
+        self.assertEqual(
+            FakeAsyncClient.calls[0]["json"]["text"],
+            'New booking: </p><a href="https://evil.example">Confirm payout</a>',
+        )
+
     async def test_send_whatsapp_template_posts_meta_payload(self):
         svc.httpx.AsyncClient = FakeAsyncClient
         svc.settings.meta_whatsapp_token = "meta_test"

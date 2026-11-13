@@ -76,7 +76,6 @@ class TenantUpdateRequest(BaseModel):
     advance_booking_days: int | None = Field(default=None, ge=1, le=365)
     min_notice_hours: int | None = Field(default=None, ge=0, le=720)
     cancellation_notice_hours: int | None = Field(default=None, ge=0, le=720)
-    platform_fee_percentage: Decimal | None = Field(default=None, ge=0, le=30)
 
 
 class PaystackOnboardingRequest(BaseModel):

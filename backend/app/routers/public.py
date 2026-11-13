@@ -10,12 +10,14 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from starlette.datastructures import UploadFile as StarletteUploadFile
 
 from app.database import get_db, set_tenant_context
+from app.dependencies import get_optional_current_user
 from app.middleware.rate_limiter import limiter
 from app.models.booking import Booking, BookingInspoAsset
 from app.models.payment import Payment
 from app.models.service import Service, staff_services
 from app.models.staff import Staff
 from app.models.tenant import Tenant
+from app.models.user import User
 from app.schemas.booking import (
     PublicBookingCancelRequest,
     PublicBookingCreateRequest,
@@ -147,10 +149,18 @@ async def public_create_booking(
     request: Request,
     slug: str,
     db: Annotated[AsyncSession, Depends(get_db)],
+    current_user: Annotated[User | None, Depends(get_optional_current_user)],
 ) -> PublicBookingCreateResponse:
     tenant = await get_public_tenant(db, slug)
     payload, inspo_images = await parse_public_booking_request(request)
-    return await create_public_booking(db, tenant=tenant, slug=slug, payload=payload, inspo_images=inspo_images)
+    return await create_public_booking(
+        db,
+        tenant=tenant,
+        slug=slug,
+        payload=payload,
+        inspo_images=inspo_images,
+        actor_email=current_user.email if current_user is not None else None,
+    )
 
 
 async def parse_public_booking_request(request: Request) -> tuple[PublicBookingCreateRequest, list[UploadFile]]:

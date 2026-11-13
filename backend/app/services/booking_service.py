@@ -30,6 +30,7 @@ async def create_public_booking(
     slug: str,
     payload: PublicBookingCreateRequest,
     inspo_images: list | None = None,
+    actor_email: str | None = None,
 ) -> PublicBookingCreateResponse:
     service = await load_service(db, tenant.id, payload.service_id)
     deposit_amount = calculate_deposit_due_now(tenant, service)
@@ -112,6 +113,7 @@ async def create_public_booking(
                 reference=reference,
                 tenant=tenant,
                 callback_url=callback_url,
+                actor_email=actor_email,
                 metadata={
                     "booking_id": str(booking.id),
                     "manage_url": manage_url,
