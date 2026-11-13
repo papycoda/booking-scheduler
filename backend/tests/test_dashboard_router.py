@@ -92,3 +92,68 @@ class DashboardRouterTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(booking.cancellation_reason, "Shop closed")
         self.assertIsNotNone(booking.cancelled_at)
         self.assertEqual(response.status, "cancelled")
+
+    async def test_approve_dashboard_payout_sends_first_payout_after_review(self):
+        tenant_id = uuid4()
+        payment_id = uuid4()
+        payment = SimpleNamespace(
+            id=payment_id,
+            settlement_status="needs_review",
+            payout_review_reason="first_payout",
+        )
+        queued = SimpleNamespace(
+            id=payment_id,
+            settlement_status="queued",
+            payout_transfer_reference=None,
+            payout_transfer_code=None,
+        )
+        paid = SimpleNamespace(
+            id=payment_id,
+            settlement_status="paid",
+            payout_transfer_reference="payout_ref",
+            payout_transfer_code="TRF_test",
+        )
+        calls = []
+
+        async def approve_payout(_db, *, tenant_id, payment_id):
+            calls.append(("approve", tenant_id, payment_id))
+            return queued
+
+        async def initiate_platform_collected_payout(_db, *, tenant_id, payment_id):
+            calls.append(("initiate", tenant_id, payment_id))
+            return paid
+
+        original_approve = dashboard.approve_payout
+        original_initiate = dashboard.initiate_platform_collected_payout
+        dashboard.approve_payout = approve_payout
+        dashboard.initiate_platform_collected_payout = initiate_platform_collected_payout
+        try:
+            response = await dashboard.approve_dashboard_payout(
+                payment_id,
+                SimpleNamespace(tenant_id=tenant_id, role="tenant_owner"),
+                FakeDashboardSession(payment, None),
+            )
+        finally:
+            dashboard.approve_payout = original_approve
+            dashboard.initiate_platform_collected_payout = original_initiate
+
+        self.assertEqual(calls, [("approve", tenant_id, payment_id), ("initiate", tenant_id, payment_id)])
+        self.assertEqual(response.settlement_status, "paid")
+        self.assertEqual(response.payout_transfer_code, "TRF_test")
+
+    async def test_approve_dashboard_payout_keeps_retry_limit_in_review(self):
+        payment = SimpleNamespace(
+            id=uuid4(),
+            settlement_status="needs_review",
+            payout_review_reason="retry_limit_reached",
+        )
+
+        with self.assertRaises(Exception) as raised:
+            await dashboard.approve_dashboard_payout(
+                payment.id,
+                SimpleNamespace(tenant_id=uuid4(), role="tenant_owner"),
+                FakeDashboardSession(payment, None),
+            )
+
+        self.assertEqual(getattr(raised.exception, "status_code", None), 403)
+        self.assertEqual(raised.exception.detail["error"], "PAYOUT_REVIEW_REQUIRED")

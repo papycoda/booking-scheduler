@@ -11,6 +11,7 @@ from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import settings
+from app.database import suspend_row_security
 from app.models.tenant import Tenant
 from app.models.user import User
 from app.services.redis_service import redis_client
@@ -60,8 +61,10 @@ async def generate_unique_slug(db: AsyncSession, business_name: str) -> str:
     slug = base_slug
     suffix = 2
     while True:
-        result = await db.execute(select(Tenant.id).where(Tenant.slug == slug))
-        if result.scalar_one_or_none() is None:
+        async with suspend_row_security(db):
+            result = await db.execute(select(Tenant.id).where(Tenant.slug == slug))
+            taken = result.scalar_one_or_none()
+        if taken is None:
             return slug
         suffix_text = f"-{suffix}"
         slug = f"{base_slug[:100 - len(suffix_text)]}{suffix_text}"
@@ -69,13 +72,15 @@ async def generate_unique_slug(db: AsyncSession, business_name: str) -> str:
 
 
 async def get_user_by_email(db: AsyncSession, email: str) -> User | None:
-    result = await db.execute(select(User).where(func.lower(User.email) == email.lower()))
-    return result.scalar_one_or_none()
+    async with suspend_row_security(db):
+        result = await db.execute(select(User).where(func.lower(User.email) == email.lower()))
+        return result.scalar_one_or_none()
 
 
 async def get_active_user_by_id(db: AsyncSession, user_id: UUID) -> User | None:
-    result = await db.execute(select(User).where(User.id == user_id, User.is_active.is_(True)))
-    return result.scalar_one_or_none()
+    async with suspend_row_security(db):
+        result = await db.execute(select(User).where(User.id == user_id, User.is_active.is_(True)))
+        return result.scalar_one_or_none()
 
 
 def hmac_reset_token(token: str) -> str:

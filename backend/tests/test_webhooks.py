@@ -49,7 +49,9 @@ class FakeWebhookSession:
         self.committed = False
         self.execute_count = 0
 
-    async def execute(self, _stmt):
+    async def execute(self, statement, _params=None):
+        if "set_config" in str(statement):
+            return FakeScalarResult(None)
         self.execute_count += 1
         if self.execute_count == 1:
             return FakeScalarResult(self.payment)
@@ -66,7 +68,9 @@ class FakeDemoSession:
         self.committed = False
         self.execute_count = 0
 
-    async def execute(self, _stmt):
+    async def execute(self, statement, _params=None):
+        if "set_config" in str(statement):
+            return FakeScalarResult(None)
         self.execute_count += 1
         if self.execute_count == 1:
             return FakeScalarResult(self.payment)

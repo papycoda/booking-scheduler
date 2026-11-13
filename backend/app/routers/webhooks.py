@@ -8,7 +8,7 @@ from fastapi.responses import JSONResponse
 from sqlalchemy import select
 
 from app.config import settings
-from app.database import SessionLocal
+from app.database import SessionLocal, set_tenant_context, suspend_row_security
 from app.models.booking import Booking
 from app.models.payment import Payment
 from app.models.tenant import Tenant
@@ -44,8 +44,9 @@ async def demo_complete_payment(
 
     try:
         async with SessionLocal() as db:
-            result = await db.execute(select(Payment).where(Payment.paystack_reference == reference))
-            payment = result.scalar_one_or_none()
+            async with suspend_row_security(db):
+                result = await db.execute(select(Payment).where(Payment.paystack_reference == reference))
+                payment = result.scalar_one_or_none()
             if payment is None:
                 return JSONResponse(
                     status_code=status.HTTP_404_NOT_FOUND,
@@ -59,6 +60,7 @@ async def demo_complete_payment(
             if payment.status == "success":
                 return JSONResponse(status_code=status.HTTP_200_OK, content={"status": "already_paid"})
 
+            await set_tenant_context(db, payment.tenant_id)
             booking_result = await db.execute(select(Booking).where(Booking.id == payment.booking_id))
             booking = booking_result.scalar_one_or_none()
             if booking is None:
@@ -127,14 +129,16 @@ async def paystack_webhook(
 
     try:
         async with SessionLocal() as db:
-            result = await db.execute(select(Payment).where(Payment.paystack_reference == reference))
-            payment = result.scalar_one_or_none()
+            async with suspend_row_security(db):
+                result = await db.execute(select(Payment).where(Payment.paystack_reference == reference))
+                payment = result.scalar_one_or_none()
             if payment is None or payment.status == "success":
                 return JSONResponse(status_code=status.HTTP_200_OK, content={"status": "ok"})
             if not verify_paystack_charge_success(event, payment):
                 logger.error("Paystack charge.success verification failed for reference %s", reference)
                 return JSONResponse(status_code=status.HTTP_200_OK, content={"status": "ignored"})
 
+            await set_tenant_context(db, payment.tenant_id)
             booking_result = await db.execute(select(Booking).where(Booking.id == payment.booking_id))
             booking = booking_result.scalar_one_or_none()
             if booking is None:
@@ -178,9 +182,11 @@ def verify_paystack_charge_success(event: dict, payment: Payment) -> bool:
 async def send_booking_confirmation_for_booking(booking_id: UUID) -> None:
     try:
         async with SessionLocal() as db:
-            result = await db.execute(select(Booking).where(Booking.id == booking_id))
-            booking = result.scalar_one_or_none()
+            async with suspend_row_security(db):
+                result = await db.execute(select(Booking).where(Booking.id == booking_id))
+                booking = result.scalar_one_or_none()
             if booking is not None:
+                await set_tenant_context(db, booking.tenant_id)
                 await send_booking_confirmation(db, booking)
     except Exception:
         logger.exception("Paystack confirmation notification failed")

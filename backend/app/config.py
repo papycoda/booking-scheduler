@@ -1,7 +1,9 @@
 from functools import lru_cache
 
-from pydantic import AnyHttpUrl, Field, field_validator
+from pydantic import AnyHttpUrl, Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
+from sqlalchemy.engine import make_url
+from sqlalchemy.engine.url import URL
 
 
 class Settings(BaseSettings):
@@ -38,9 +40,11 @@ class Settings(BaseSettings):
 
     @property
     def sqlalchemy_database_url(self) -> str:
-        if self.database_url.startswith("postgresql://"):
-            return self.database_url.replace("postgresql://", "postgresql+asyncpg://", 1)
-        return self.database_url
+        return normalize_async_database_url(self.database_url)[0]
+
+    @property
+    def asyncpg_connect_args(self) -> dict[str, bool]:
+        return normalize_async_database_url(self.database_url)[1]
 
 
 @lru_cache
@@ -49,3 +53,28 @@ def get_settings() -> Settings:
 
 
 settings = get_settings()
+
+
+def normalize_async_database_url(database_url: str) -> tuple[str, dict[str, bool]]:
+    """Return an asyncpg URL and connect args for Render-style Postgres URLs."""
+    raw = database_url.strip()
+    if raw.startswith("postgres://"):
+        raw = "postgresql://" + raw[len("postgres://") :]
+    url = make_url(raw)
+    if url.drivername == "postgresql":
+        url = url.set(drivername="postgresql+asyncpg")
+    query = dict(url.query)
+    sslmode = str(query.pop("sslmode", "") or "").lower()
+    query.pop("channel_binding", None)
+    connect_args: dict[str, bool] = {}
+    if sslmode == "disable":
+        connect_args["ssl"] = False
+    elif sslmode:
+        connect_args["ssl"] = True
+    if query != dict(url.query):
+        url = url.set(query=query)
+    return _render_database_url(url), connect_args
+
+
+def _render_database_url(url: URL) -> str:
+    return url.render_as_string(hide_password=False)

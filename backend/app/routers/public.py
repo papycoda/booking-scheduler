@@ -9,7 +9,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from starlette.datastructures import UploadFile as StarletteUploadFile
 
-from app.database import get_db, set_tenant_context
+from app.database import get_db, set_tenant_context, suspend_row_security
 from app.dependencies import get_optional_current_user
 from app.middleware.rate_limiter import limiter
 from app.models.booking import Booking, BookingInspoAsset
@@ -45,8 +45,9 @@ router = APIRouter(prefix="/book", tags=["public booking"])
 
 
 async def get_public_tenant(db: AsyncSession, slug: str) -> Tenant:
-    result = await db.execute(select(Tenant).where(Tenant.slug == slug, Tenant.status == "active"))
-    tenant = result.scalar_one_or_none()
+    async with suspend_row_security(db):
+        result = await db.execute(select(Tenant).where(Tenant.slug == slug, Tenant.status == "active"))
+        tenant = result.scalar_one_or_none()
     if tenant is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail={"error": "TENANT_NOT_FOUND", "message": "Booking page was not found."})
     await set_tenant_context(db, tenant.id)

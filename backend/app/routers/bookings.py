@@ -253,13 +253,16 @@ async def approve_dashboard_payout(
     payment = payment_result.scalar_one_or_none()
     if payment is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail={"error": "PAYMENT_NOT_FOUND", "message": "Payment was not found."})
-    if payment.settlement_status == "needs_review":
+    is_first_payout_review = payment.settlement_status == "needs_review" and payment.payout_review_reason == "first_payout"
+    if payment.settlement_status == "needs_review" and not is_first_payout_review:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail={"error": "PAYOUT_REVIEW_REQUIRED", "message": "This payout needs manual review before it can be sent."}
         )
 
     payment = await approve_payout(db, tenant_id=current_user.tenant_id, payment_id=payment_id)
+    if is_first_payout_review:
+        payment = await initiate_platform_collected_payout(db, tenant_id=current_user.tenant_id, payment_id=payment_id)
     return DashboardPayoutResponse(
         payment_id=payment.id,
         settlement_status=payment.settlement_status,
